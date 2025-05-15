@@ -1,0 +1,236 @@
+[
+    {
+        "name": "z",
+        "type": "Dresses",
+        "color": "z",
+        "weather_tags": [
+            "Hot",
+            "Windy"
+        ],
+        "event_tags": [
+            "Party"
+        ],
+        "image_link": "uploaded_images/dress.jpg"
+    },
+    {
+        "name": "pink pant zara",
+        "type": "Bottoms",
+        "color": "pink",
+        "weather_tags": [
+            "Cold",
+            "Rainy",
+            "Windy"
+        ],
+        "event_tags": [
+            "Business",
+            "Casual"
+        ],
+        "image_link": "uploaded_images/pink.jpg"
+    },
+    {
+        "name": "K\u00fcpe",
+        "type": "Accessories",
+        "color": "white",
+        "weather_tags": [
+            "Hot",
+            "Windy",
+            "Rainy"
+        ],
+        "event_tags": [
+            "Business",
+            "Casual",
+            "Party"
+        ],
+        "image_link": "uploaded_images/kupe.jpg"
+    },
+    {
+        "name": "bileklik",
+        "type": "Accessories",
+        "color": "white",
+        "weather_tags": [
+            "Hot",
+            "Windy",
+            "Rainy"
+        ],
+        "event_tags": [
+            "Business",
+            "Casual",
+            "Party"
+        ],
+        "image_link": "uploaded_images/bileklik.jpg"
+    },
+    {
+        "name": "mont",
+        "type": "Tops",
+        "color": "black",
+        "weather_tags": [
+            "Windy",
+            "Rainy",
+            "Cold"
+        ],
+        "event_tags": [
+            "Business",
+            "Casual",
+            "Sport"
+        ],
+        "image_link": "uploaded_images/mont.jpg"
+    },
+    {
+        "name": "ceket",
+        "type": "Bottoms",
+        "color": "black",
+        "weather_tags": [
+            "Windy",
+            "Rainy",
+            "Cold"
+        ],
+        "event_tags": [
+            "Casual",
+            "Sport",
+            "Party"
+        ],
+        "image_link": "uploaded_images/ceket.jpg"
+    },
+    {
+        "name": "ceket",
+        "type": "Tops",
+        "color": "black",
+        "weather_tags": [
+            "Windy",
+            "Rainy",
+            "Cold"
+        ],
+        "event_tags": [
+            "Casual",
+            "Party",
+            "Business"
+        ],
+        "image_link": "uploaded_images/h\u0131rka.jpg"
+    },
+    {
+        "name": "e\u015fofman",
+        "type": "Bottoms",
+        "color": "black",
+        "weather_tags": [
+            "Windy",
+            "Rainy",
+            "Cold"
+        ],
+        "event_tags": [
+            "Sport"
+        ],
+        "image_link": "uploaded_images/esofman.jpg"
+    },
+    {
+        "name": "\u00e7anta",
+        "type": "Accessories",
+        "color": "white",
+        "weather_tags": [
+            "Windy",
+            "Cold",
+            "Hot"
+        ],
+        "event_tags": [
+            "Casual",
+            "Business",
+            "Party"
+        ],
+        "image_link": "uploaded_images/\u00e7anta.jpg"
+    },
+    {
+        "name": "topuklu ayakkab\u0131",
+        "type": "Shoes",
+        "color": "white",
+        "weather_tags": [
+            "Windy",
+            "Cold",
+            "Hot"
+        ],
+        "event_tags": [
+            "Casual",
+            "Business",
+            "Party"
+        ],
+        "image_link": "uploaded_images/heels.jpg"
+    },
+    {
+        "name": "spor ayakkab\u0131",
+        "type": "Shoes",
+        "color": "white",
+        "weather_tags": [
+            "Cold",
+            "Hot",
+            "Rainy"
+        ],
+        "event_tags": [
+            "Casual",
+            "Business",
+            "Sport"
+        ],
+        "image_link": "uploaded_images/sneakers.jpg"
+    },
+    {
+        "name": "ti\u015f\u00f6rt",
+        "type": "Tops",
+        "color": "white",
+        "weather_tags": [
+            "Hot",
+            "Rainy",
+            "Windy"
+        ],
+        "event_tags": [
+            "Casual",
+            "Business",
+            "Sport"
+        ],
+        "image_link": "uploaded_images/ti\u015f\u00f6rt.jpg"
+    },
+    {
+        "name": "kot pantolon",
+        "type": "Bottoms",
+        "color": "blue",
+        "weather_tags": [
+            "Hot",
+            "Rainy",
+            "Windy"
+        ],
+        "event_tags": [
+            "Casual",
+            "Business",
+            "Sport"
+        ],
+        "image_link": "uploaded_images/kot.jpg"
+    },
+    {
+        "name": "kot pantolon",
+        "type": "Bottoms",
+        "color": "blue",
+        "weather_tags": [
+            "Rainy",
+            "Windy",
+            "Cold"
+        ],
+        "event_tags": [
+            "Casual",
+            "Business",
+            "Sport"
+        ],
+        "image_link": "uploaded_images/kot.jpg"
+    },
+    {
+        "name": "kazak",
+        "type": "Tops",
+        "color": "yellow",
+        "weather_tags": [
+            "Rainy",
+            "Windy",
+            "Cold"
+        ],
+        "event_tags": [
+            "Casual",
+            "Business",
+            "Sport"
+        ],
+        "image_link": "uploaded_images/kazak.jpg"
+    }
+]
