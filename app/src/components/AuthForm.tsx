@@ -1,0 +1,94 @@
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
+
+import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { useErrorText } from '@/lib/errors';
+import { useI18n } from '@/lib/i18n';
+import { space, usePalette } from '@/lib/theme';
+
+import { CloseIcon } from './icons';
+import { Button, Field, Notice, Screen, T } from './ui';
+
+export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
+  const { t, lang } = useI18n();
+  const p = usePalette();
+  const { signIn } = useAuth();
+  const errorText = useErrorText();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isUp = mode === 'sign-up';
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = isUp
+        ? await api.register({ email: email.trim(), password, name: name.trim(), locale: lang })
+        : await api.login({ email: email.trim(), password });
+      await signIn(res.token, res.user);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const valid = email.includes('@') && password.length >= (isUp ? 8 : 1);
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <Screen edges={['top', 'bottom']}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t.common.close}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/welcome'))}
+          style={{ alignSelf: 'flex-start', paddingVertical: space.md }}
+          hitSlop={12}
+        >
+          <CloseIcon color={p.ink} />
+        </Pressable>
+
+        <T variant="title" accessibilityRole="header" style={{ marginTop: space.lg, marginBottom: space.xl }}>
+          {isUp ? t.auth.signUpTitle : t.auth.signInTitle}
+        </T>
+
+        <View style={{ gap: space.lg }}>
+          {isUp ? (
+            <Field label={t.auth.name} value={name} onChangeText={setName} autoComplete="name" textContentType="name" />
+          ) : null}
+          <Field
+            label={t.auth.email}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            textContentType="emailAddress"
+          />
+          <Field
+            label={t.auth.password}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoComplete={isUp ? 'new-password' : 'current-password'}
+            textContentType={isUp ? 'newPassword' : 'password'}
+            hint={isUp ? t.auth.passwordHint : undefined}
+            onSubmitEditing={() => valid && submit()}
+          />
+          {error ? <Notice tone="error">{error}</Notice> : null}
+          <Button label={isUp ? t.auth.signUp : t.auth.signIn} onPress={submit} loading={busy} disabled={!valid} />
+          <Button
+            label={isUp ? t.auth.haveAccount : t.auth.noAccount}
+            kind="ghost"
+            onPress={() => router.replace(isUp ? '/sign-in' : '/sign-up')}
+          />
+        </View>
+      </Screen>
+    </KeyboardAvoidingView>
+  );
+}
