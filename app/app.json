@@ -1,0 +1,66 @@
+{
+  "expo": {
+    "name": "SmartWardrobe",
+    "slug": "smartwardrobe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fomertech.smartwardrobe"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ECE8E3",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.fomertech.smartwardrobe"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-image",
+      "expo-secure-store",
+      "expo-localization",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ECE8E3",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "dark": {
+            "backgroundColor": "#19121A"
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SmartWardrobe uses your photos so you can add clothes to your wardrobe.",
+          "cameraPermission": "SmartWardrobe uses the camera so you can photograph clothes for your wardrobe.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SmartWardrobe uses your location to show today's weather for outfit suggestions."
+        }
+      ]
+    ],
+    "scheme": "smartwardrobe",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

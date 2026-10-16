@@ -1,0 +1,144 @@
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, useWindowDimensions, View } from 'react-native';
+
+import { CityPicker } from '@/components/CityPicker';
+import { Button, Chip, Field, Notice, Screen, T, tap } from '@/components/ui';
+import { OutfitBoard } from '@/components/wardrobe';
+import { api, Occasion, OCCASIONS, Outfit } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { useErrorText } from '@/lib/errors';
+import { skyKey, useI18n } from '@/lib/i18n';
+import { patchOutfit, useFeedback, useItems } from '@/lib/queries';
+import { space, usePalette } from '@/lib/theme';
+
+export default function Today() {
+  const p = usePalette();
+  const { t, lang } = useI18n();
+  const { user, setUser } = useAuth();
+  const errorText = useErrorText();
+  const { width } = useWindowDimensions();
+  const boardWidth = Math.min(width, 720) - space.xl * 2;
+
+  const [occasion, setOccasion] = useState<Occasion>('casual');
+  const [note, setNote] = useState('');
+  const [outfits, setOutfits] = useState<Outfit[]>([]);
+  const [pickingCity, setPickingCity] = useState(false);
+
+  const items = useItems();
+  const hasLocation = user?.lat != null && user?.lon != null;
+  const weather = useQuery({
+    queryKey: ['weather', user?.lat, user?.lon],
+    queryFn: () => api.weather(user!.lat!, user!.lon!),
+    enabled: hasLocation,
+    staleTime: 15 * 60_000,
+  });
+
+  const suggest = useMutation({
+    mutationFn: () => api.suggest({ occasion, note: note.trim(), lang }),
+    onSuccess: (res) => setOutfits(res.outfits),
+  });
+  const feedback = useFeedback();
+
+  const cats = new Set((items.data ?? []).map((i) => i.category));
+  const ready = cats.has('dress') || (cats.has('top') && cats.has('bottom'));
+
+  async function pickCity(c: { city: string; lat: number; lon: number }) {
+    setPickingCity(false);
+    setUser(await api.updateMe(c));
+  }
+
+  function rate(o: Outfit, r: -1 | 1) {
+    const rating = o.rating === r ? 0 : r;
+    setOutfits((list) => patchOutfit(list, { ...o, rating }));
+    feedback.mutate({ id: o.id, rating });
+  }
+
+  const w = weather.data;
+  return (
+    <Screen>
+      {/* The day, as a headline */}
+      <View style={{ marginTop: space.xl, marginBottom: space.xl }}>
+        {hasLocation && w?.temp != null ? (
+          <Pressable accessibilityRole="button" onPress={() => setPickingCity((v) => !v)}>
+            <T variant="display" accessibilityRole="header">
+              {t.today.weatherLine(user!.city, Math.round(w.temp), t.sky[skyKey(w.code)])}
+            </T>
+            {w.min != null && w.max != null ? (
+              <T variant="body" color="muted" style={{ marginTop: space.sm }}>
+                {t.today.range(Math.round(w.min), Math.round(w.max), Math.round(w.rain_chance ?? 0))}
+              </T>
+            ) : null}
+          </Pressable>
+        ) : hasLocation && weather.isLoading ? (
+          <ActivityIndicator color={p.ink} style={{ alignSelf: 'flex-start' }} />
+        ) : (
+          <>
+            <T variant="display" accessibilityRole="header">
+              {t.today.noCity}
+            </T>
+            {!pickingCity ? (
+              <Button label={t.today.setCity} kind="secondary" onPress={() => setPickingCity(true)} style={{ marginTop: space.lg }} />
+            ) : null}
+            {weather.isError ? (
+              <T variant="small" color="muted" style={{ marginTop: space.sm }}>
+                {t.errors.weather_unavailable}
+              </T>
+            ) : null}
+          </>
+        )}
+      </View>
+
+      {pickingCity ? (
+        <View style={{ marginBottom: space.xl }}>
+          <CityPicker onPick={pickCity} />
+        </View>
+      ) : null}
+
+      {items.isSuccess && !ready ? (
+        <View style={{ gap: space.md }}>
+          <Notice>{t.today.incomplete}</Notice>
+          <Button label={t.today.addItems} onPress={() => router.push('/item/new')} />
+        </View>
+      ) : (
+        <View style={{ gap: space.lg }}>
+          <T variant="heading">{t.today.occasion}</T>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+            {OCCASIONS.map((o) => (
+              <Chip key={o} label={t.occasions[o]} selected={occasion === o} onPress={() => setOccasion(o)} />
+            ))}
+          </View>
+          <Field
+            label={t.today.note}
+            placeholder={t.today.notePlaceholder}
+            value={note}
+            onChangeText={setNote}
+            maxLength={200}
+          />
+          {suggest.isError ? <Notice tone="error">{errorText(suggest.error)}</Notice> : null}
+          <Button
+            label={suggest.isPending ? t.today.suggesting : outfits.length ? t.today.again : t.today.suggest}
+            loading={suggest.isPending}
+            onPress={() => {
+              tap();
+              suggest.mutate();
+            }}
+          />
+        </View>
+      )}
+
+      <View style={{ gap: space.xxl, marginTop: space.xxl }}>
+        {outfits.map((o) => (
+          <OutfitBoard
+            key={o.id}
+            outfit={o}
+            width={boardWidth}
+            onRate={(r) => rate(o, r)}
+            onOpenItem={(item) => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
+          />
+        ))}
+      </View>
+    </Screen>
+  );
+}

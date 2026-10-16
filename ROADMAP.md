@@ -8,7 +8,8 @@ The original code is preserved on the [`legacy-streamlit`](https://github.com/fa
 | Topic | Choice | Why |
 |---|---|---|
 | Backend | FastAPI + SQLAlchemy + Alembic | Python, typed, easy to test |
-| App | Expo (React Native) + Expo Router | one codebase → iOS, Android, web |
+| App | Expo SDK 58 (React Native) + Expo Router | one codebase → iOS, Android, web |
+| Look | oyster / paper / aubergine / tailor's-tape yellow, Bricolage Grotesque; outfits shown as a tilted flat-lay board | a fashion app that doesn't look like a template |
 | Languages | English + Turkish | `en` / `tr` everywhere, AI answers in the user's language |
 | Clothing recognition | Groq vision LLM (`qwen/qwen3.8-27b`) | colour, pattern, season and warmth in one call; replaces the old TensorFlow model |
 | Outfit suggestions | Groq `openai/gpt-oss-120b`, picks **only the user's own items** by id | validated server-side, learns from 👍/👎 |
@@ -27,14 +28,15 @@ The original code is preserved on the [`legacy-streamlit`](https://github.com/fa
 - [x] Weather + city search, rate limits, translated error codes
 - [x] Alembic migrations, tests (SQLite) + smoke test on Postgres, CI
 
-### Phase 2 — App (Expo)
-- [ ] Sign in / sign up / "Try the demo"
-- [ ] Wardrobe grid with category filter
-- [ ] Add item: camera or gallery → AI tags → edit & save
-- [ ] "What should I wear?": city, occasion, note → outfit cards with 👍/👎
-- [ ] History / liked outfits
-- [ ] Settings: language, city, sign out, delete account
-- [ ] EN/TR translations, light/dark theme
+### Phase 2 — App (Expo) ✅
+- [x] Welcome with "Try the demo", sign in / sign up
+- [x] Today: weather as the headline, occasion + note → outfits laid out as a flat-lay board with a hang-tag (title, reason, 👍/👎)
+- [x] Wardrobe grid with category filter, add button
+- [x] Add item: camera or gallery → AI tags → edit & save; edit / delete
+- [x] Saved: liked and recent outfits
+- [x] Profile: city (search or location), language, sign out, delete account, privacy link
+- [x] EN/TR (Turkish locative suffixes handled), light/dark theme
+- [ ] Final product name (one constant in `app/src/lib/brand.ts`)
 
 ### Phase 3 — Go live (web)
 - [ ] Neon project, Hugging Face Space `smartwardrobe-api`, secrets

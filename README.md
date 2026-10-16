@@ -13,7 +13,7 @@ AI outfit suggestions from **your own wardrobe**, for today's weather and wherev
 
 ```
 backend/   FastAPI · SQLAlchemy · Alembic · Groq (vision + text) · Open-Meteo
-app/       Expo (React Native) · Expo Router — iOS, Android, web   (phase 2)
+app/       Expo (React Native) · Expo Router — iOS, Android, web
 ```
 
 ## Backend quick start
@@ -29,6 +29,17 @@ pytest
 ```
 
 API reference and the AI design: [backend/README.md](backend/README.md).
+
+## App quick start
+
+```bash
+cd app
+npm install
+cp .env.example .env.local    # EXPO_PUBLIC_API_URL
+npx expo start                # scan the QR code with Expo Go, or press w for web
+```
+
+More in [app/README.md](app/README.md).
 
 ## Author
 
