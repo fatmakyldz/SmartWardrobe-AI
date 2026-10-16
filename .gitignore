@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.db
+.env
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+web-build/
+*.tsbuildinfo
+.env*.local
+
+# Native builds (EAS builds in the cloud)
+ios/
+android/
+*.apk
+*.aab
+*.ipa
+
+# OS
+.DS_Store
