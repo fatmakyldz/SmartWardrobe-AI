@@ -37,3 +37,14 @@ def keep_known(values, allowed: list[str], limit: int) -> list[str]:
 def one_of(value, allowed: list[str], default: str) -> str:
     v = str(value or "").strip().lower()
     return v if v in allowed else default
+
+# Onboarding answers and explicit style preferences (§10). Fixed lists, so nothing free-form reaches the prompt.
+STYLES = ["minimal", "classic", "casual", "bold", "sporty", "romantic", "streetwear", "boho"]
+PALETTES = ["neutral", "dark", "vivid", "pastel"]
+PRIORITIES = ["comfort", "elegance", "weather", "variety"]
+AVOIDABLE = PATTERNS + CATEGORIES  # e.g. "floral", "dress"
+
+# Formality window per occasion (§6).
+OCCASION_FORMALITY = {
+    "casual": (1, 3), "work": (2, 4), "formal": (4, 5), "sport": (1, 2), "date": (2, 4), "party": (2, 5), "travel": (1, 3),
+}

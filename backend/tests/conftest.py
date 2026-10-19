@@ -72,6 +72,6 @@ def auth(client):
 @pytest.fixture
 def fake_weather(monkeypatch):
     w = {"temp": 12.0, "feels_like": 10.0, "wind_kmh": 18.0, "code": 61, "min": 9.0, "max": 14.0, "rain_chance": 70}
-    monkeypatch.setattr("app.routers.outfits.get_weather", lambda lat, lon: w)
+    monkeypatch.setattr("app.services.orchestration.get_weather", lambda lat, lon: w)
     monkeypatch.setattr("app.routers.misc.get_weather", lambda lat, lon: w)
     return w

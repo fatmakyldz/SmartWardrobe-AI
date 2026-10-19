@@ -144,4 +144,60 @@ class FeedbackIn(BaseModel):
     rating: Literal[-1, 0, 1]
 
 
+class OutfitCreateIn(BaseModel):
+    item_ids: list[uuid.UUID] = Field(min_length=1, max_length=10)
+    occasion: Occasion = "casual"
+    title: str = Field(default="", max_length=120)
+    lang: Lang = "en"
+
+
+class OutfitItemsIn(BaseModel):
+    item_ids: list[uuid.UUID] = Field(min_length=1, max_length=10)
+
+
+Color = Literal["black", "white", "grey", "navy", "blue", "lightblue", "green", "olive", "beige", "cream", "brown",
+                "khaki", "red", "burgundy", "pink", "purple", "yellow", "orange", "gold", "silver", "multi"]
+Style = Literal["minimal", "classic", "casual", "bold", "sporty", "romantic", "streetwear", "boho"]
+Palette = Literal["neutral", "dark", "vivid", "pastel"]
+Priority = Literal["comfort", "elegance", "weather", "variety"]
+Avoidable = Literal["solid", "striped", "checked", "floral", "printed", "denim", "knit", "leather", "other",
+                    "top", "bottom", "dress", "outerwear", "shoes", "accessory", "bag"]
+
+
+class StyleAnswers(BaseModel):
+    q1: Style | None = None  # overall style
+    q2: list[Palette] | None = Field(default=None, max_length=4)  # colour world
+    q3: Priority | None = None  # what matters most when choosing
+
+
+class StyleIn(BaseModel):
+    """Only fixed vocabularies, so nothing free-form ever reaches a prompt."""
+
+    answers: StyleAnswers | None = None
+    liked_colors: list[Color] | None = Field(default=None, max_length=8)
+    disliked_colors: list[Color] | None = Field(default=None, max_length=8)
+    styles: list[Style] | None = Field(default=None, max_length=4)
+    avoid: list[Avoidable] | None = Field(default=None, max_length=8)
+
+
+class StyleOut(BaseModel):
+    answers: dict = Field(default_factory=dict)
+    liked_colors: list[str] = Field(default_factory=list)
+    disliked_colors: list[str] = Field(default_factory=list)
+    styles: list[str] = Field(default_factory=list)
+    avoid: list[str] = Field(default_factory=list)
+    summary: str | None = None
+
+
+class VocabOut(BaseModel):
+    categories: list[str]
+    colors: list[str]
+    patterns: list[str]
+    seasons: list[str]
+    occasions: list[str]
+    styles: list[str]
+    palettes: list[str]
+    priorities: list[str]
+
+
 TokenOut.model_rebuild()

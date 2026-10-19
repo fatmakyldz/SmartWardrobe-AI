@@ -1,22 +1,20 @@
 import hashlib
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, Form, Header, Request, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from ..ai.features import tagging
 from ..config import get_settings
 from ..db import get_db
 from ..entitlements import UserBudget, entitlements, require_feature
-from ..images import new_key, normalize
-from ..models import Item, User
+from ..models import User
 from ..ratelimit import limiter
 from ..schemas import AnalyzeOut, ItemIn, ItemOut, ItemUpdate, Tags
 from ..security import current_user
 from ..serialize import item_out
+from ..services import wardrobe
 from ..storage import get_storage
-from ..vocab import COLORS, PATTERNS, SEASONS, keep_known, one_of
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -38,14 +36,8 @@ def analyze(
     require_feature(ent, "tagging")
 
     s = get_settings()
-    raw = image.file.read(s.max_upload_mb * 1024 * 1024 + 1)
-    stored, small = normalize(raw, s.max_upload_mb)
+    key, small = wardrobe.store_upload(db, user, image.file.read(s.max_upload_mb * 1024 * 1024 + 1), s.max_upload_mb)
     lang = "tr" if lang == "tr" else "en"
-
-    key = new_key(user.id)
-    storage = get_storage()
-    storage.put(db, key, stored, "image/webp")
-    db.commit()
 
     # The same photo sent twice within a minute (double tap, retry) is tagged once.
     same_photo = idempotency_key or f"{hashlib.sha256(small).hexdigest()}:{lang}"
@@ -53,61 +45,25 @@ def analyze(
                                budget=UserBudget(user, ent), idempotency_key=same_photo)
     tags = out.model_dump()
     is_clothing = tags.pop("is_clothing")
-    return AnalyzeOut(image_key=key, image_url=storage.url(key), is_clothing=is_clothing, tags=Tags(**tags))
-
-
-def _clean(values: dict) -> dict:
-    if "colors" in values and values["colors"] is not None:
-        values["colors"] = keep_known(values["colors"], COLORS, 3)
-    if "seasons" in values and values["seasons"] is not None:
-        values["seasons"] = keep_known(values["seasons"], SEASONS, 4)
-    if "pattern" in values and values["pattern"] is not None:
-        values["pattern"] = one_of(values["pattern"], PATTERNS, "solid")
-    return values
+    return AnalyzeOut(image_key=key, image_url=get_storage().url(key), is_clothing=is_clothing, tags=Tags(**tags))
 
 
 @router.post("", response_model=ItemOut, status_code=201)
 def create_item(body: ItemIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    # The key must be one this user uploaded via /items/analyze.
-    if not body.image_key.startswith(f"u/{user.id.hex}/"):
-        raise HTTPException(400, detail={"code": "invalid_image"})
-    if len(user.items) >= entitlements(user, db).max_items:
-        raise HTTPException(400, detail={"code": "wardrobe_full"})
-    item = Item(user_id=user.id, **_clean(body.model_dump()))
-    db.add(item)
-    db.commit()
-    return item_out(item)
+    return item_out(wardrobe.create_item(db, user, body.model_dump(), entitlements(user, db).max_items))
 
 
 @router.get("", response_model=list[ItemOut])
 def list_items(category: str | None = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    q = select(Item).where(Item.user_id == user.id)
-    if category:
-        q = q.where(Item.category == category)
-    return [item_out(i) for i in db.scalars(q.order_by(Item.created_at.desc()))]
-
-
-def _own_item(db: Session, user: User, item_id: uuid.UUID) -> Item:
-    item = db.get(Item, item_id)
-    if item is None or item.user_id != user.id:
-        raise HTTPException(404, detail={"code": "not_found"})
-    return item
+    return [item_out(i) for i in wardrobe.list_items(db, user, category)]
 
 
 @router.patch("/{item_id}", response_model=ItemOut)
 def update_item(item_id: uuid.UUID, body: ItemUpdate, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    item = _own_item(db, user, item_id)
-    for field, value in _clean(body.model_dump(exclude_unset=True)).items():
-        if value is not None:
-            setattr(item, field, value)
-    db.commit()
-    return item_out(item)
+    return item_out(wardrobe.update_item(db, user, item_id, body.model_dump(exclude_unset=True)))
 
 
 @router.delete("/{item_id}", status_code=204)
 def delete_item(item_id: uuid.UUID, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    item = _own_item(db, user, item_id)
-    get_storage().delete(db, [item.image_key])
-    db.delete(item)
-    db.commit()
+    wardrobe.delete_item(db, user, item_id)
     return Response(status_code=204)
