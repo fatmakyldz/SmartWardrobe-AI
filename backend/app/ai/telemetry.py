@@ -24,6 +24,7 @@ class AttemptRecord:
     model_class: str
     status: str  # ok / timeout / rate_limited / bad_output / error
     error_code: str | None = None
+    detail: str | None = None  # provider's error message, ≤200 chars; logged, not stored
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd_micro: int = 0
@@ -53,6 +54,7 @@ def log_attempt(request_id: uuid.UUID, feature: str, prompt_hash: str, a: Attemp
         "model": a.model,
         "status": a.status,
         "error_code": a.error_code,
+        "detail": a.detail,
         "latency_ms": a.latency_ms,
         "attempt": a.attempt_no,
         "input_tokens": a.input_tokens,

@@ -11,6 +11,15 @@ from .base import ImagePart, ProviderCall, ProviderError, ProviderResult, TextPa
 DEFAULT_THINKING_HEADROOM = 4096  # adaptive thinking counts towards max_tokens
 
 
+def _detail(e: Exception) -> str:
+    """The API's own error message (e.g. what was wrong with the request), not the SDK's wrapper text."""
+    body = getattr(e, "body", None)
+    if isinstance(body, dict) and isinstance(body.get("error"), dict) and body["error"].get("message"):
+        status = getattr(e, "status_code", "")
+        return f"{status} {body['error'].get('type', '')}: {body['error']['message']}".strip()
+    return str(e)
+
+
 @lru_cache
 def _client(api_key: str) -> anthropic.Anthropic:
     # Retries belong to the gateway, which counts every attempt's tokens.
@@ -65,15 +74,15 @@ class AnthropicProvider:
         except anthropic.APIConnectionError as e:
             raise ProviderError("unavailable", str(e))
         except anthropic.RateLimitError as e:
-            raise ProviderError("rate_limited", str(e))
+            raise ProviderError("rate_limited", _detail(e))
         except anthropic.OverloadedError as e:
-            raise ProviderError("rate_limited", str(e))
+            raise ProviderError("rate_limited", _detail(e))
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
-            raise ProviderError("auth", str(e))
+            raise ProviderError("auth", _detail(e))
         except (anthropic.NotFoundError, anthropic.BadRequestError, anthropic.UnprocessableEntityError) as e:
-            raise ProviderError("config", str(e))
+            raise ProviderError("config", _detail(e))
         except anthropic.APIStatusError as e:
-            raise ProviderError("unavailable" if e.status_code >= 500 else "error", str(e))
+            raise ProviderError("unavailable" if e.status_code >= 500 else "error", _detail(e))
 
         u = resp.usage
         tokens = dict(

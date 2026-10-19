@@ -34,6 +34,16 @@ def _user_content(call: ProviderCall) -> str | list[dict]:
     return content
 
 
+def _detail(resp: httpx.Response) -> str:
+    try:
+        err = resp.json().get("error") or {}
+        if isinstance(err, dict) and err.get("message"):
+            return f"{resp.status_code} {err.get('type') or err.get('code') or ''}: {err['message']}"
+    except ValueError:
+        pass
+    return f"{resp.status_code}: {resp.text}"
+
+
 class GroqProvider:
     name = "groq"
 
@@ -63,13 +73,13 @@ class GroqProvider:
             raise ProviderError("unavailable", str(e))
 
         if resp.status_code == 429:
-            raise ProviderError("rate_limited", resp.text)
+            raise ProviderError("rate_limited", _detail(resp))
         if resp.status_code in (401, 403):
-            raise ProviderError("auth", resp.text)
+            raise ProviderError("auth", _detail(resp))
         if resp.status_code >= 500:
-            raise ProviderError("unavailable", resp.text)
+            raise ProviderError("unavailable", _detail(resp))
         if resp.status_code >= 400:
-            raise ProviderError("config", resp.text)
+            raise ProviderError("config", _detail(resp))
 
         try:
             payload = resp.json()

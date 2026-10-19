@@ -352,3 +352,23 @@ def test_ai_debug_log_is_refused_with_postgres():
     env["AI_DEBUG_LOG"] = "false"
     assert subprocess.run([sys.executable, "-c", "import app.main"], cwd=Path(__file__).resolve().parents[1],
                           env=env, capture_output=True).returncode == 0
+
+
+def test_skipped_models_do_not_hide_a_busy_chain(caplog):
+    FAKE.script("fake-vision-a", ProviderError("config", "400 invalid_request_error: unknown field"))
+    FAKE.script("fake-vision-b", ProviderError("rate_limited", "429 tokens: slow down"), ProviderError("rate_limited"))
+    with caplog.at_level(logging.INFO, logger="ai"), pytest.raises(AIError) as e:
+        complete(tag_request(), budget=Gate())
+    assert e.value.code == "ai_busy"
+    lines = [json.loads(r.getMessage()) for r in caplog.records if r.name == "ai"]
+    assert [(l["error_code"], l["detail"]) for l in lines] == [
+        ("config", "400 invalid_request_error: unknown field"), ("rate_limited", "429 tokens: slow down"),
+        ("rate_limited", None)]
+
+
+def test_schema_errors_are_logged_without_the_model_output(caplog):
+    FAKE.script("fake-vision-a", "SECRET MODEL TEXT", "SECRET MODEL TEXT")
+    FAKE.script("fake-vision-b", TAGS)
+    with caplog.at_level(logging.INFO, logger="ai"):
+        complete(tag_request(), budget=Gate())
+    assert "SECRET MODEL TEXT" not in caplog.text and "schema errors" in caplog.text
