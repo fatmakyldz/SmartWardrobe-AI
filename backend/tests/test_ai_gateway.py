@@ -254,12 +254,16 @@ def _demo(client):
     return {"Authorization": f"Bearer {token}"}
 
 
-GOOD = {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]}
+def good(call, model=None):
+    from tests.helpers import outfit
+
+    return {"outfits": [{"title": "t", "items": outfit(call), "reason": "r"}]}
 
 
 def test_suggest_with_only_invalid_ids_retries_then_succeeds(client):
     h = _demo(client)
-    FAKE.script("fake-text-a", {"outfits": [{"title": "x", "items": [999], "reason": "r"}]}, GOOD)
+    FAKE.script("fake-text-a", {"outfits": [{"title": "x", "items": [999], "reason": "r"}]})
+    FAKE.respond = good
     r = client.post("/outfits/suggest", json={}, headers=h)
     assert r.status_code == 200, r.text
     assert FAKE.calls[1][1].repair_note
@@ -269,7 +273,7 @@ def test_suggest_with_only_invalid_ids_retries_then_succeeds(client):
 
         o = db.get(Outfit, uuid.UUID(outfit_id))
         req = db.get(AIRequestRow, o.ai_request_id)
-        assert (o.prompt_version, req.feature, req.attempts_count) == ("v1", "suggest", 2)
+        assert (o.prompt_version, req.feature, req.attempts_count) == ("v2", "suggest", 2)
 
 
 def test_suggest_daily_request_limit_counts_only_successes(client):
@@ -277,7 +281,7 @@ def test_suggest_daily_request_limit_counts_only_successes(client):
     FAKE.script("fake-text-a", ProviderError("unavailable"))
     FAKE.script("fake-text-b", ProviderError("unavailable"))
     assert client.post("/outfits/suggest", json={}, headers=h).status_code == 503  # failed: not counted
-    FAKE.respond = lambda call, model: GOOD
+    FAKE.respond = good
     codes = [client.post("/outfits/suggest", json={}, headers=h).status_code for _ in range(6)]
     assert codes == [200] * 5 + [429]
     r = client.post("/outfits/suggest", json={}, headers=h)
@@ -330,7 +334,7 @@ def test_same_photo_twice_is_tagged_once(client, auth):
 
 def test_suggest_idempotency_key_header(client):
     h = _demo(client)
-    FAKE.respond = lambda call, model: GOOD
+    FAKE.respond = good
     a = client.post("/outfits/suggest", json={}, headers={**h, "Idempotency-Key": "abc"})
     b = client.post("/outfits/suggest", json={}, headers={**h, "Idempotency-Key": "abc"})
     c = client.post("/outfits/suggest", json={}, headers=h)  # "Suggest again" without a key: a new call

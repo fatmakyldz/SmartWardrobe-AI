@@ -65,12 +65,17 @@ It adds fields to `users` / `items` / `outfits`, ten new tables, and copies `out
 | POST | `/auth/register`, `/auth/login` | email + password → token |
 | POST | `/auth/demo` | private demo account with a 17-piece sample wardrobe (deleted after 24 h) |
 | GET/PATCH/DELETE | `/me` | profile, city, language; DELETE removes the account and every photo |
+| GET/PATCH | `/me/style` | style preferences `{answers: {q1 style, q2 palettes, q3 priority}, liked_colors, disliked_colors, styles, avoid}` (fixed vocabularies) + the rule-based taste summary |
 | POST | `/items/analyze` | upload a photo → stored + AI-suggested tags |
 | GET/POST | `/items` | list / save (after the user confirms the tags) |
 | PATCH/DELETE | `/items/{id}` | edit / delete |
 | POST | `/outfits/suggest` | `{occasion, note?, lat?, lon?, lang}` → 2-3 outfits from the user's own items |
 | GET | `/outfits` | history (`?liked_only=true`) |
+| POST | `/outfits` | a user-built outfit `{item_ids, occasion, title?}`: own items only, one per category (accessories aside), top + bottom or a dress (`user_outfits` feature) |
+| PATCH | `/outfits/{id}/items` | change an outfit's pieces `{item_ids}`; an AI suggestion becomes `ai_edited` (`user_outfits` feature) |
+| POST | `/outfits/{id}/worn` | "wore it today": `worn_at`, each piece's `wear_count` / `last_worn_at`; counted once per day |
 | POST | `/outfits/{id}/feedback` | `{rating: -1 \| 0 \| 1}` — used in future suggestions |
+| GET | `/meta/vocab` | categories, colours, patterns, seasons, occasions, styles, palettes, priorities (no auth) |
 | GET | `/weather`, `/cities` | Open-Meteo weather and city search |
 | GET | `/images/{key}` | photos (database storage mode) |
 
@@ -88,6 +93,32 @@ uvicorn's own proxy handling is turned off in the `Dockerfile` (`--no-proxy-head
 
 Other limits: `MAX_UPLOAD_MB` (default 10), the hourly `ANALYZE_LIMIT` / `SUGGEST_LIMIT` / `DEMO_LIMIT`; plan limits are under "Plans and limits" below.
 
+## Code layout
+
+Routers check auth, input and plan, then call one service. **Services are the only writers of business data** (users, items, outfits, outfit_items, feedback_events); `ai/telemetry` (`ai_requests`) and `entitlements` (`usage_counters`) write only their own tables. Services never call `app.ai`; `services/orchestration.py` reads what a suggestion needs and hands it to `ai/context.py` as plain DTOs.
+
+| Module | |
+|---|---|
+| `services/wardrobe.py` | photo upload, item list / create / edit / delete |
+| `services/outfits.py` | saving suggestions, user outfits, editing pieces, "worn" |
+| `services/feedback.py` | 👍 / 👎 → `outfits.rating` + `feedback_events` |
+| `services/profile.py` | accounts, profile, style preferences, rule-based taste summary |
+| `services/demo.py` | demo accounts |
+| `services/orchestration.py` | collects DTOs for `ai.context` (read-only) |
+| `ai/context.py` | pure: wardrobe pre-filter, ordering, item numbering, the text the model sees |
+
+### What goes into a suggestion (design §6)
+
+`ai/context.py` builds the context from DTOs and a `today` date — no DB, no clock — so it is snapshot-tested:
+
+1. **Pre-filter**: archived pieces out; pieces whose seasons miss today's season out (southern hemisphere flipped); warmth vs. feels-like (above 24 °C no warmth ≥ 4, below 8 °C no warmth ≤ 1); the occasion's formality window (casual 1–3, work 2–4, formal 4–5, sport 1–2, date 2–4, party 2–5, travel 1–3); caps per category (top 20, bottom 12, dress 8, outerwear 8, shoes 8, bag 5, accessory 8). If what is left can't make an outfit, the season, then warmth, then formality filter is dropped.
+2. **Order and numbers**: favourites, then most recently worn, then newest, then id. The model only sees these numbers; `index_to_item_id` maps them back.
+3. **Around the wardrobe**: occasion + note (200 chars, e-mails and phone numbers masked), weather + season, style preferences, the taste summary, the last 5 like / dislike / worn events as category + colour, pieces worn in the last 7 days ("prefer variety").
+
+The **taste summary** is not an LLM call: `services/profile.py` turns the last 30 like / dislike / worn events into 3–4 template sentences (colours, pieces, formality, colours to avoid) in the user's language. It is rebuilt after 10 new events or when it is older than 7 days.
+
+Context size: the 17-piece demo wardrobe ≈ 450 tokens; a 300-piece wardrobe ≈ 1 850 (was ≈ 8 000 when the whole wardrobe was sent).
+
 ## How the AI parts work
 
 All model calls go through one gateway (`app/ai/`, design in `docs/AI-00-foundation.md` §3–§5):
@@ -101,7 +132,7 @@ router → entitlements (plan, feature allowed?) → features/{tagging,suggest} 
 - **Models** live only in `app/ai/routes.default.json` (override with `AI_ROUTES`): tagging uses Claude Haiku (vision) then Groq Qwen vision; suggestions use Claude Sonnet then Groq `gpt-oss-120b`. Prices there drive the cost in `ai_requests`. A provider without an API key is skipped.
 - **Retries and fallback**: a timeout or rate limit is retried once on the same model, an answer that fails the schema is retried once with a "fix the format" note, anything else moves to the next model. A provider failing 5 times in 5 minutes goes to the end of the chain for 2 minutes.
 - **Output** is never trusted: Claude must answer through one strict tool, Groq in JSON mode, and every answer is validated and coerced into the fixed vocabularies (`app/ai/schemas/`, `app/vocab.py`). Outfits may only use the user's own item numbers. The LLM never writes to the database.
-- **Prompts** are versioned files in `app/ai/prompts/<feature>/v1.md`; outfits store the prompt version and the `ai_requests` id.
+- **Prompts** are versioned files in `app/ai/prompts/<feature>/vN.md`; outfits store the prompt version and the `ai_requests` id. Suggestions use `suggest/v2` (same system text as v1, the §6 context).
 - **Telemetry**: one `ai_requests` row per request and one `ai_request_attempts` row per provider call (tokens, cost, latency, status), plus a JSON log line per attempt. Prompts, photos and notes are never logged — only a prompt hash and token counts. `python scripts/ai_report.py [--date YYYY-MM-DD]` prints a day's cost, latency, fallback and error summary.
 
 ## Plans and limits

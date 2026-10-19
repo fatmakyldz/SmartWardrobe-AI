@@ -8,13 +8,14 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .config import get_settings
-from .images import normalize
-from .models import Item, User
-from .security import hash_password
-from .storage import get_storage
+from ..config import get_settings
+from ..images import normalize
+from ..models import Item, User
+from ..security import hash_password
+from ..storage import get_storage
+from .profile import delete_account
 
-ASSETS = Path(__file__).parent / "demo_assets"
+ASSETS = Path(__file__).parent.parent / "demo_assets"
 
 # file, category, subcategory, colors, pattern, warmth, formality, seasons, name en, name tr
 ALL = ["spring", "summer", "autumn", "winter"]
@@ -81,15 +82,9 @@ def create_demo_user(db: Session, locale: str) -> User:
     return user
 
 
-def delete_user(db: Session, user: User) -> None:
-    get_storage().delete_prefix(db, f"u/{user.id.hex}/")
-    db.delete(user)
-    db.commit()
-
-
 def cleanup_expired_demos(db: Session) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=get_settings().demo_ttl_hours)
     expired = list(db.scalars(select(User).where(User.is_demo.is_(True), User.created_at < cutoff).limit(50)))
     for user in expired:
-        delete_user(db, user)
+        delete_account(db, user)
     return len(expired)

@@ -4,11 +4,12 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_db
-from ..demo import cleanup_expired_demos, create_demo_user
 from ..models import User
 from ..ratelimit import limiter
 from ..schemas import DemoIn, LoginIn, RegisterIn, TokenOut, UserOut
 from ..security import create_token, hash_password, verify_password
+from ..services import profile
+from ..services.demo import cleanup_expired_demos, create_demo_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -23,13 +24,7 @@ def _token(user: User) -> TokenOut:
 @router.post("/register", response_model=TokenOut, status_code=201)
 @limiter.limit("10/hour")
 def register(request: Request, body: RegisterIn, db: Session = Depends(get_db)):
-    email = body.email.lower()
-    if db.scalar(select(User).where(func.lower(User.email) == email)):
-        raise HTTPException(409, detail={"code": "email_taken"})
-    user = User(email=email, password_hash=hash_password(body.password), name=body.name.strip(), locale=body.locale)
-    db.add(user)
-    db.commit()
-    return _token(user)
+    return _token(profile.create_user(db, body.email, body.password, body.name, body.locale))
 
 
 @router.post("/login", response_model=TokenOut)

@@ -3,6 +3,7 @@ import io
 from PIL import Image
 
 from app.ai.providers import FAKE
+from tests.helpers import answer, wardrobe
 
 
 def png_bytes(color=(200, 30, 60)) -> bytes:
@@ -135,7 +136,7 @@ def test_ai_not_configured(client, auth, monkeypatch):
 def test_analyze_runs_off_the_event_loop(client, auth, monkeypatch, fake_ai):
     import asyncio
 
-    import app.routers.items as items_router
+    import app.services.wardrobe as wardrobe_service
 
     def on_loop() -> bool:
         try:
@@ -145,7 +146,7 @@ def test_analyze_runs_off_the_event_loop(client, auth, monkeypatch, fake_ai):
             return False
 
     seen = {}
-    real_normalize = items_router.normalize
+    real_normalize = wardrobe_service.normalize
 
     def spy_normalize(raw, max_mb):
         seen["normalize"] = on_loop()
@@ -155,7 +156,7 @@ def test_analyze_runs_off_the_event_loop(client, auth, monkeypatch, fake_ai):
         seen["llm"] = on_loop()
         return {"is_clothing": True, "category": "top"}
 
-    monkeypatch.setattr(items_router, "normalize", spy_normalize)
+    monkeypatch.setattr(wardrobe_service, "normalize", spy_normalize)
     fake_ai.respond = spy_chat
     r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=auth)
     assert r.status_code == 200, r.text
@@ -218,39 +219,41 @@ def test_suggest_validates_and_learns(client, fake_weather, fake_ai):
 
     def fake_chat(call, model):
         prompts.append(call.parts[0].text)
-        # 0 white tee, 4 jeans, 12 sneakers, 11 leather jacket | 8 dress, 14 loafers
+        w = wardrobe(call)
+        top, top2, bottom, shoes = w["top"][0], w["top"][1], w["bottom"][0], w["shoes"][0]
         return {
             "outfits": [
-                {"title": "Rainy casual", "items": [0, 4, 12, 11, 999], "reason": "Layers for the rain."},
-                {"title": "Duplicate", "items": [4, 0, 12, 11], "reason": "same set"},
-                {"title": "Two tops", "items": [0, 1, 12], "reason": "invalid: no bottom"},
-                {"title": "Dress up", "items": [8, 14], "reason": "Easy elegance."},
+                {"title": "Smart date", "items": [top, bottom, shoes, w["outerwear"][0], 999], "reason": "Layers."},
+                {"title": "Duplicate", "items": [bottom, top, shoes, w["outerwear"][0]], "reason": "same set"},
+                {"title": "Two tops", "items": [top, top2, shoes], "reason": "invalid: no bottom"},
+                {"title": "Dress up", "items": [w["dress"][0], shoes], "reason": "Easy elegance."},
             ]
         }
 
     fake_ai.respond = fake_chat
-    r = client.post("/outfits/suggest", json={"occasion": "casual", "lang": "en"}, headers=h)
+    r = client.post("/outfits/suggest", json={"occasion": "date", "lang": "en"}, headers=h)
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["weather"]["temp"] == 12.0
     titles = [o["title"] for o in data["outfits"]]
-    assert titles == ["Rainy casual", "Dress up"]  # hallucinated id dropped, duplicate + incomplete removed
+    assert titles == ["Smart date", "Dress up"]  # hallucinated id dropped, duplicate + incomplete removed
     assert len(data["outfits"][0]["items"]) == 4
-    assert "rain" in prompts[0] and "OCCASION: casual" in prompts[0]
+    assert "rain" in prompts[0] and "OCCASION: date" in prompts[0]
 
     first = data["outfits"][0]["id"]
     fb = client.post(f"/outfits/{first}/feedback", json={"rating": 1}, headers=h)
     assert fb.json()["rating"] == 1
 
     client.post("/outfits/suggest", json={"occasion": "work"}, headers=h)
-    assert "USER LIKED" in prompts[1]
+    assert "RECENT FEEDBACK" in prompts[1] and "like [" in prompts[1]
+    assert "TASTE SUMMARY: Likes" in prompts[1]  # first feedback event builds the summary
 
     liked = client.get("/outfits?liked_only=true", headers=h).json()
     assert [o["id"] for o in liked] == [first]
 
 
 def _demo_with_outfit(client, monkeypatch):
-    FAKE.respond = (lambda call, model: {"outfits": [{"title": "t", "items": [4, 0, 12], "reason": "r"}]})
+    FAKE.respond = answer("bottom", "top", "shoes")
     token = client.post("/auth/demo", json={}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
     outfit = client.post("/outfits/suggest", json={}, headers=h).json()["outfits"][0]
@@ -319,8 +322,8 @@ def test_suggest_without_weather_still_works(client, monkeypatch):
     def boom(lat, lon):
         raise HTTPException(502, detail={"code": "weather_unavailable"})
 
-    monkeypatch.setattr("app.routers.outfits.get_weather", boom)
-    FAKE.respond = (lambda call, model: {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]})
+    monkeypatch.setattr("app.services.orchestration.get_weather", boom)
+    FAKE.respond = answer()
     token = client.post("/auth/demo", json={}).json()["token"]
     r = client.post("/outfits/suggest", json={}, headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200 and r.json()["weather"] is None
@@ -369,7 +372,7 @@ def test_delete_account_removes_everything(client, monkeypatch):
     from app.db import SessionLocal
     from app.models import FeedbackEvent, Item, Outfit, OutfitItem, StoredImage, User
 
-    FAKE.respond = (lambda call, model: {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]})
+    FAKE.respond = answer()
     token = client.post("/auth/demo", json={}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
     outfit = client.post("/outfits/suggest", json={}, headers=h).json()["outfits"][0]
@@ -385,7 +388,7 @@ def test_rate_limit_on_suggest(client, fake_weather, monkeypatch):
     from app.config import get_settings
 
     monkeypatch.setattr(get_settings(), "suggest_limit", "2/hour")
-    FAKE.respond = (lambda call, model: {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]})
+    FAKE.respond = answer()
     token = client.post("/auth/demo", json={}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
     codes = [client.post("/outfits/suggest", json={}, headers=h).status_code for _ in range(3)]

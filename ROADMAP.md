@@ -56,5 +56,6 @@ Design: [`docs/AI-00-foundation.md`](docs/AI-00-foundation.md) — Claude primar
 - [x] AI-00 Foundation design — approved 19 Oct 2026
 - [x] AI-01 Quick fixes — `analyze` off the event loop, Today suggestions in the query cache, trusted proxy list, `MAX_ITEMS` in config, CLAUDE.md
 - [x] AI-02 Schema migration — `0002_ai_foundation` (new fields, ten tables, `item_ids` → `outfit_items`, ratings → `feedback_events`), Postgres + `alembic check` in CI
-- [ ] AI-03 AI gateway + entitlements — `app/ai/` (Claude primary, Groq fallback, retries, telemetry), `app/entitlements/` (plans, daily budget, grants) *(this PR)*
-- [ ] AI-04 … AI-09 — context + services, storage + auth, intelligence features, onboarding, entitlements UI, V1.0 hardening; scope and order in the design doc (§13)
+- [x] AI-03 AI gateway + entitlements — `app/ai/` (Claude primary, Groq fallback, retries, telemetry), `app/entitlements/` (plans, daily budget, grants)
+- [ ] AI-04 Context + services — `app/services/` (only writer of business data), pure `ai/context.py` (§6 pre-filter, ordering, PII masking), rule-based taste summary, user outfits / edit / worn / style / vocab endpoints *(this PR)*
+- [ ] AI-05 … AI-09 — storage + auth, intelligence features, onboarding, entitlements UI, V1.0 hardening; scope and order in the design doc (§13)

@@ -1,101 +1,69 @@
-"""Suggest outfits from the user's own wardrobe: prompt suggest/v1 + SuggestOut + id/category checks."""
+"""Suggest outfits from the user's own wardrobe: prompt suggest/v2 + SuggestOut + id/category checks.
+
+The context (which items, in which order, under which numbers) comes from ai.context; this module only
+asks the model and keeps the answers that respect the wardrobe.
+"""
 
 import uuid
+from dataclasses import dataclass
 
-from ...models import Item, Outfit
-from ...weather import describe
+from ...outfit_rules import complete_outfit
 from ..gateway import AIRequest, AIResponse, BudgetGate, complete
 from ..providers import TextPart
 from ..schemas import SuggestOut
+from ..schemas.context import ItemDTO, SuggestContext
 
 LANG_NAME = {"en": "English", "tr": "Turkish"}
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"  # v1 system text, §6 context
 
 
-def _item_line(i: int, item: Item) -> str:
-    return (
-        f"{i}: {item.category}/{item.subcategory or '-'} | colors={','.join(item.colors) or '-'} "
-        f"| pattern={item.pattern} | warmth={item.warmth} | formality={item.formality} "
-        f"| seasons={','.join(item.seasons) or '-'}"
-    )
+@dataclass(frozen=True)
+class ValidatedOutfit:
+    title: str
+    reason: str
+    items: tuple[ItemDTO, ...]
 
 
-def _weather_line(w: dict) -> str:
-    return (
-        f"now {w.get('temp')}°C (feels {w.get('feels_like')}°C), today {w.get('min')}–{w.get('max')}°C, "
-        f"{describe(w.get('code'))}, rain chance {w.get('rain_chance')}%, wind {w.get('wind_kmh')} km/h"
-    )
+def wardrobe_ready(items) -> bool:
+    return complete_outfit([i.category for i in items])
 
 
-def wardrobe_ready(items: list[Item]) -> bool:
-    cats = {i.category for i in items}
-    return "dress" in cats or {"top", "bottom"} <= cats
-
-
-def validate_outfits(out: SuggestOut, index: dict[int, Item]) -> list[dict]:
-    """Keep only outfits built from real item numbers, one item per category (accessories aside),
-    complete (top + bottom, or a dress) and not repeated."""
+def validate_outfits(out: SuggestOut, ctx: SuggestContext) -> list[ValidatedOutfit]:
+    """Keep only outfits built from numbers in ctx.index_to_item_id, one item per category (accessories
+    aside), complete (top + bottom, or a dress) and not repeated."""
+    by_index = dict(enumerate(ctx.items))
     result, seen = [], set()
     for o in out.outfits:
-        chosen: list[Item] = []
-        used_categories: set[str] = set()
+        chosen: list[ItemDTO] = []
+        used: set[str] = set()
         for x in o.items:
-            item = index.get(x)
-            if item is None:
+            if x not in ctx.index_to_item_id:
                 continue  # hallucinated id
-            if item in chosen:
-                continue
-            if item.category in used_categories and item.category != "accessory":
+            item = by_index[x]
+            if item in chosen or (item.category in used and item.category != "accessory"):
                 continue
             chosen.append(item)
-            used_categories.add(item.category)
-
-        cats = {i.category for i in chosen}
-        complete_ = "dress" in cats or {"top", "bottom"} <= cats
+            used.add(item.category)
         signature = frozenset(i.id for i in chosen)
-        if not complete_ or signature in seen:
+        if not complete_outfit([i.category for i in chosen]) or signature in seen:
             continue
         seen.add(signature)
-        result.append({"title": o.title, "reason": o.reason, "items": chosen})
+        result.append(ValidatedOutfit(title=o.title, reason=o.reason, items=tuple(chosen)))
     return result
 
 
 def suggest(
-    items: list[Item],
-    weather: dict | None,
-    occasion: str,
-    note: str,
+    ctx: SuggestContext,
     lang: str,
-    history: list[Outfit],
     *,
     subject_id: uuid.UUID,
     tier: str,
     budget: BudgetGate,
     count: int = 3,
     idempotency_key: str | None = None,
-) -> tuple[list[dict], AIResponse]:
-    index = {i: item for i, item in enumerate(items)}
-    by_id = {str(item.id): i for i, item in index.items()}
-
-    liked, disliked = [], []
-    for o in history:
-        idxs = [by_id[x] for x in o.item_ids if x in by_id]
-        if len(idxs) >= 2:
-            (liked if o.rating > 0 else disliked).append(idxs)
-
-    lines = [
-        f"OCCASION: {occasion}" + (f" — user note: {note}" if note else ""),
-        f"WEATHER: {_weather_line(weather)}" if weather else "WEATHER: unknown, assume mild indoor day",
-        "WARDROBE (id: category/type | attributes):",
-        *[_item_line(i, it) for i, it in index.items()],
-    ]
-    if liked:
-        lines.append(f"USER LIKED these combinations before: {liked[:8]}")
-    if disliked:
-        lines.append(f"USER DISLIKED these combinations: {disliked[:8]} — avoid repeating them")
-
+) -> tuple[list[ValidatedOutfit], AIResponse]:
     def check(out: SuggestOut) -> None:
-        if not validate_outfits(out, index):
+        if not validate_outfits(out, ctx):
             raise ValueError("no valid outfit")
 
     resp = complete(
@@ -105,7 +73,7 @@ def suggest(
             tier=tier,
             prompt_version=PROMPT_VERSION,
             system_vars={"language": LANG_NAME[lang], "count": count},
-            user_content=[TextPart("\n".join(lines))],
+            user_content=[TextPart(ctx.text)],
             schema=SuggestOut,
             max_output_tokens=1800,
             timeout_s=45,
@@ -115,4 +83,4 @@ def suggest(
         ),
         budget=budget,
     )
-    return validate_outfits(resp.data, index)[:count], resp
+    return validate_outfits(resp.data, ctx)[:count], resp

@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import User
-from ..schemas import CityOut, WeatherOut
+from ..schemas import CityOut, VocabOut, WeatherOut
 from ..security import current_user
 from ..storage import get_storage
+from ..vocab import CATEGORIES, COLORS, OCCASIONS, PALETTES, PATTERNS, PRIORITIES, SEASONS, STYLES
 from ..weather import get_weather, search_city
 
 router = APIRouter(tags=["misc"])
@@ -37,3 +38,10 @@ def image(key: str, db: Session = Depends(get_db)):
         media_type=content_type,
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
+
+
+@router.get("/meta/vocab", response_model=VocabOut)
+def vocab():
+    """The fixed vocabularies, so the app no longer keeps its own copy (wired in AI-07)."""
+    return VocabOut(categories=CATEGORIES, colors=COLORS, patterns=PATTERNS, seasons=SEASONS, occasions=OCCASIONS,
+                    styles=STYLES, palettes=PALETTES, priorities=PRIORITIES)
