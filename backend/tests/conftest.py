@@ -1,8 +1,13 @@
 import os
 import tempfile
 
-_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-os.environ["DATABASE_URL"] = f"sqlite:///{_db.name}"
+# SQLite by default. CI also runs the suite on Postgres via TEST_DATABASE_URL — a separate
+# variable so a DATABASE_URL exported for real work is never dropped by these tests.
+if os.environ.get("TEST_DATABASE_URL"):
+    os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
+else:
+    _db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    os.environ["DATABASE_URL"] = f"sqlite:///{_db.name}"
 os.environ["GROQ_API_KEY"] = "test-key"
 os.environ["SECRET_KEY"] = "test-secret-key-that-is-long-enough-32b"
 os.environ["PUBLIC_BASE_URL"] = "http://testserver"

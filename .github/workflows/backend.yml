@@ -14,6 +14,22 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PG: postgresql://postgres:postgres@localhost:5432
+      SECRET_KEY: ci-only-secret-key-that-is-long-enough-32b
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,7 +38,22 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
       - run: pip install -r requirements-dev.txt
-      - run: pytest -q
+      - run: psql "$PG/postgres" -c "CREATE DATABASE sw_test" -c "CREATE DATABASE sw_migrate"
+      - name: pytest (SQLite)
+        run: pytest -q
+      - name: pytest (Postgres)
+        run: pytest -q
+        env:
+          TEST_DATABASE_URL: ${{ env.PG }}/sw_test
+      - name: Migrations on Postgres — upgrade, check, down, up, check
+        env:
+          DATABASE_URL: ${{ env.PG }}/sw_migrate
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade -1
+          alembic upgrade head
+          alembic check
 
   # Pushes backend/ to the Hugging Face Space after tests pass on main.
   # Setup: repo secret HF_TOKEN (write token) + repo variable HF_SPACE (e.g. ftmakyldz/smartwardrobe-api).
