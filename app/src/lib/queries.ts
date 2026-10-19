@@ -1,11 +1,18 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api, Item, Outfit, Tags } from './api';
+import { api, Item, Occasion, Outfit, Tags } from './api';
 
 export const keys = {
   items: ['items'] as const,
   outfits: (liked: boolean) => ['outfits', liked] as const,
+  // The last set from /outfits/suggest. Client-only: filled by useSuggest, never fetched.
+  latestOutfits: ['outfits', 'latest'] as const,
 };
+
+// Saved lists (['outfits', true|false]) — everything under ['outfits'] except the client-only latest set.
+function invalidateOutfitLists(qc: QueryClient) {
+  return qc.invalidateQueries({ queryKey: ['outfits'], predicate: (q) => q.queryKey[1] !== 'latest' });
+}
 
 export function useItems() {
   return useQuery({ queryKey: keys.items, queryFn: api.items });
@@ -13,6 +20,28 @@ export function useItems() {
 
 export function useOutfits(liked: boolean) {
   return useQuery({ queryKey: keys.outfits(liked), queryFn: () => api.outfits(liked) });
+}
+
+export function useLatestOutfits() {
+  return useQuery<Outfit[]>({
+    queryKey: keys.latestOutfits,
+    queryFn: () => [],
+    enabled: false, // nothing to fetch; keeps invalidations and refocus from wiping it
+    initialData: [],
+    staleTime: Infinity,
+    gcTime: Infinity, // survive tab switches; cleared with the rest of the cache on sign-out
+  });
+}
+
+export function useSuggest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: { occasion: Occasion; note: string; lang: string }) => api.suggest(b),
+    onSuccess: (res) => {
+      qc.setQueryData<Outfit[]>(keys.latestOutfits, res.outfits);
+      invalidateOutfitLists(qc);
+    },
+  });
 }
 
 export function useCreateItem() {
@@ -46,7 +75,17 @@ export function useFeedback() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, rating }: { id: string; rating: -1 | 0 | 1 }) => api.feedback(id, rating),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['outfits'] }),
+    // Today shows the new rating at once; Saved waits for the refetch as before.
+    onMutate: ({ id, rating }) => {
+      const previous = qc.getQueryData<Outfit[]>(keys.latestOutfits);
+      qc.setQueryData<Outfit[]>(keys.latestOutfits, (list) => list?.map((o) => (o.id === id ? { ...o, rating } : o)));
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => qc.setQueryData(keys.latestOutfits, ctx?.previous),
+    onSuccess: (updated) => {
+      qc.setQueryData<Outfit[]>(keys.latestOutfits, (list) => list && patchOutfit(list, updated));
+      invalidateOutfitLists(qc);
+    },
   });
 }
 
