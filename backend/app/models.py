@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    or_,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -249,6 +250,14 @@ class WardrobeImage(Base):
     attached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     item: Mapped[Item | None] = relationship(back_populates="wardrobe_image")
+
+    @classmethod
+    def visible_to(cls, user: User):
+        """WHERE clause for listing a user's images. Shared (user_id NULL) demo images are visible to
+        demo accounts only; every list query over this table must use it."""
+        if user.is_demo:
+            return or_(cls.user_id == user.id, cls.user_id.is_(None))
+        return cls.user_id == user.id
 
 
 class RefreshToken(Base):

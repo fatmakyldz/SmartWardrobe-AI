@@ -45,15 +45,18 @@ TEST_DATABASE_URL=postgresql://postgres@localhost:5432/sw_test pytest -q
 It adds fields to `users` / `items` / `outfits`, ten new tables, and copies `outfits.item_ids` → `outfit_items` and ratings → `feedback_events` (`outfits.item_ids` and `images` stay until `0003_cleanup`). On the production database (Neon), before the deploy:
 
 1. Take a Neon branch (snapshot) to roll back to.
-2. Clear expired demo accounts so they aren't migrated: `python -c "from app.db import SessionLocal; from app.demo import cleanup_expired_demos as c; db = SessionLocal(); print(c(db))"` (deletes up to 50 per run; repeat until it prints 0).
+2. Clear expired demo accounts so they aren't migrated — **from a checkout of the current `main`** (this branch's models expect the 0002 columns): `python -c "from app.db import SessionLocal; from app.demo import cleanup_expired_demos as c; db = SessionLocal(); print(c(db))"` (deletes up to 50 per run; repeat until it prints 0).
 3. Count real accounts: `SELECT count(*) FROM users WHERE NOT is_demo;`
-4. Deploy (merge to `main`) — the container runs the migration.
-5. If step 3 found real accounts, mark them verified so they aren't locked out once AI features require a verified email (decision C1):
+4. Preview the data step (read-only, works on the 0001 schema): `python scripts/preview_0002_data_step.py` — prints how many `outfit_items` / `feedback_events` rows it will write and how many item ids it will skip, by reason: `deleted_item`, `foreign_item` (another user's item), `duplicate_id`, `invalid_id`. The migration logs the same totals.
+5. Deploy (merge to `main`) — the container runs the migration.
+6. If step 3 found real accounts, mark them verified so they aren't locked out once AI features require a verified email (decision C1):
    ```bash
    python scripts/mark_existing_verified.py           # dry run: prints counts
    python scripts/mark_existing_verified.py --apply   # email_verified_at = created_at (demo accounts skipped)
    ```
    This is deliberately not part of the migration; it is idempotent and can run any time before AI-05 ships.
+
+`wardrobe_images.user_id` is NULL only for shared demo images. Any query that lists images must filter with `WardrobeImage.visible_to(user)`, which includes NULL-owner rows for demo accounts only.
 
 ## Endpoints
 

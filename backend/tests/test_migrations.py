@@ -126,10 +126,21 @@ def test_data_step_moves_item_ids_and_ratings(migrate):
                                            item(foreign, other, "top")])
         conn.execute(t["outfits"].insert(), [
             outfit(o_plain, [top, bottom], 0),
-            # a deleted item and someone else's item are skipped; order of the rest is kept
-            outfit(o_missing, [shoes, gone, foreign, top], 0),
+            # a deleted item, someone else's item, a repeat and a non-UUID are skipped; order of the rest is kept
+            outfit(o_missing, [shoes, gone, foreign, top, shoes, "not-a-uuid"], 0),
             outfit(o_rated, [bottom, top], 1),
         ])
+
+    # Dry run on the 0001 database (what production runs before merging): counts by reason, no writes.
+    sys.path.insert(0, str(BACKEND / "scripts"))
+    import preview_0002_data_step as preview
+
+    with engine.connect() as conn:
+        assert preview.preview(conn) == {
+            "outfits": 3, "outfit_items": 6, "feedback_events": 1,
+            "deleted_item": 1, "foreign_item": 1, "duplicate_id": 1, "invalid_id": 1,
+        }
+    assert "outfit_items" not in sa.inspect(engine).get_table_names()
 
     migrate("upgrade", "head")
 
@@ -158,7 +169,7 @@ def test_data_step_moves_item_ids_and_ratings(migrate):
         assert conn.execute(sa.text("SELECT DISTINCT source FROM outfits")).scalars().all() == ["ai"]
         # item_ids is untouched — still the read path
         raw = conn.execute(sa.select(outfits_t.c.item_ids).where(outfits_t.c.id == o_missing)).scalar_one()
-        assert raw == [str(shoes), str(gone), str(foreign), str(top)]
+        assert raw == [str(shoes), str(gone), str(foreign), str(top), str(shoes), "not-a-uuid"]
 
 
 def test_mark_existing_verified_script(migrate):

@@ -1,3 +1,5 @@
+from logging.config import fileConfig
+
 from alembic import context
 
 from app import models  # noqa: F401  (registers tables on Base.metadata)
@@ -5,6 +7,11 @@ from app.config import get_settings
 from app.db import Base, make_engine
 
 target_metadata = Base.metadata
+
+# CLI runs: log revisions and the data step's totals (alembic.ini [loggers]). Tests pass their own
+# connection and keep pytest's logging.
+if context.config.config_file_name and "connection" not in context.config.attributes:
+    fileConfig(context.config.config_file_name, disable_existing_loggers=False)
 
 
 def run_migrations_offline() -> None:

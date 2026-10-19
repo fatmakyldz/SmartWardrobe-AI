@@ -7,6 +7,7 @@ Revises: 9d38cab9fd49
 Create Date: 2026-10-19
 
 """
+import logging
 import uuid
 from typing import Sequence, Union
 
@@ -265,6 +266,7 @@ _feedback = sa.table("feedback_events", sa.column("id", sa.Uuid), sa.column("use
                      sa.column("created_at", TS))
 
 PAGE = 500
+SKIP_REASONS = ("deleted_item", "foreign_item", "duplicate_id", "invalid_id")
 
 
 def _parse(value) -> uuid.UUID | None:
@@ -274,13 +276,12 @@ def _parse(value) -> uuid.UUID | None:
         return None
 
 
-def migrate_data(conn) -> None:
-    """item_ids → outfit_items, rating → feedback_events, plan/token_version, updated_at back-fill."""
-    conn.execute(sa.update(_users).values(plan="free", token_version=0))
-    for t in (_users, _items, _outfits):
-        conn.execute(sa.update(t).where(t.c.updated_at.is_(None)).values(updated_at=t.c.created_at))
-    conn.execute(sa.update(_outfits).values(source="ai"))
+def plan_outfit_data(conn):
+    """Read-only: yield (outfit_items rows, feedback_events rows, skipped counts) per page of outfits.
 
+    Only reads columns that exist since 0001, so scripts/preview_0002_data_step.py can run it on the
+    production database before the migration.
+    """
     last_id = None
     while True:
         q = sa.select(_outfits.c.id, _outfits.c.user_id, _outfits.c.item_ids, _outfits.c.rating, _outfits.c.created_at)
@@ -288,7 +289,7 @@ def migrate_data(conn) -> None:
             q = q.where(_outfits.c.id > last_id)
         page = conn.execute(q.order_by(_outfits.c.id).limit(PAGE)).all()
         if not page:
-            break
+            return
         last_id = page[-1].id
 
         wanted = {i for o in page for i in map(_parse, o.item_ids or []) if i is not None}
@@ -298,23 +299,54 @@ def migrate_data(conn) -> None:
             items = {r.id: r for r in rows}
 
         links, events = [], []
+        skipped = dict.fromkeys(SKIP_REASONS, 0)
         for o in page:
             seen: set[uuid.UUID] = set()
             for raw in o.item_ids or []:
                 item_id = _parse(raw)
                 item = items.get(item_id)
-                # Skip ids that no longer exist, belong to someone else, or repeat.
-                if item is None or item.user_id != o.user_id or item_id in seen:
-                    continue
-                seen.add(item_id)
-                links.append({"outfit_id": o.id, "item_id": item_id, "position": len(seen) - 1, "slot": item.category})
+                if item_id is None:
+                    skipped["invalid_id"] += 1
+                elif item is None:
+                    skipped["deleted_item"] += 1
+                elif item.user_id != o.user_id:
+                    skipped["foreign_item"] += 1
+                elif item_id in seen:
+                    skipped["duplicate_id"] += 1
+                else:
+                    seen.add(item_id)
+                    links.append({"outfit_id": o.id, "item_id": item_id, "position": len(seen) - 1,
+                                  "slot": item.category})
             if o.rating:
                 events.append({"id": uuid.uuid4(), "user_id": o.user_id, "outfit_id": o.id, "item_id": None,
                                "kind": "like" if o.rating > 0 else "dislike", "created_at": o.created_at})
-        if links:
+        yield len(page), links, events, skipped
+
+
+def summarize(conn, write: bool = False) -> dict[str, int]:
+    """Walk the plan; insert the rows when write=True. Returns totals (outfits, links, events, skips)."""
+    totals = dict.fromkeys(("outfits", "outfit_items", "feedback_events", *SKIP_REASONS), 0)
+    for n, links, events, skipped in plan_outfit_data(conn):
+        if write and links:
             conn.execute(sa.insert(_outfit_items), links)
-        if events:
+        if write and events:
             conn.execute(sa.insert(_feedback), events)
+        totals["outfits"] += n
+        totals["outfit_items"] += len(links)
+        totals["feedback_events"] += len(events)
+        for reason, count in skipped.items():
+            totals[reason] += count
+    return totals
+
+
+def migrate_data(conn) -> None:
+    """item_ids → outfit_items, rating → feedback_events, plan/token_version, updated_at back-fill."""
+    conn.execute(sa.update(_users).values(plan="free", token_version=0))
+    for t in (_users, _items, _outfits):
+        conn.execute(sa.update(t).where(t.c.updated_at.is_(None)).values(updated_at=t.c.created_at))
+    conn.execute(sa.update(_outfits).values(source="ai"))
+    totals = summarize(conn, write=True)
+    logging.getLogger("alembic.runtime.migration").info("0002 data step: %s", totals)
 
 
 def downgrade() -> None:
