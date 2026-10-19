@@ -387,13 +387,13 @@ Mevcut düzen korunur: pytest + SQLite + `TestClient` + `monkeypatch`; buna `pro
 
 ## 13. Implementation phases
 
-Sıra mevcut koddaki bağımlılıklara göre belirlendi; önerilen listeden tek fark, **storage/auth'un (AI-03) gateway'den (AI-04) önce değil sonra** gelmesi: gateway ve entitlements app'i hiç değiştirmeden backend'de bitirilebilirken, auth değişikliği app'e dokunur ve e-posta sağlayıcısı kararını bekler. Her faz kendi PR'ı, kendi testleri ve yeşil CI ile biter.
+Sıra mevcut koddaki bağımlılıklara göre belirlendi; önerilen listeden tek fark, **storage/auth'un (AI-05) gateway'den (AI-03) önce değil sonra** gelmesi: gateway ve entitlements app'i hiç değiştirmeden backend'de bitirilebilirken, auth değişikliği app'e dokunur ve e-posta sağlayıcısı kararını bekler. Her faz kendi PR'ı, kendi testleri ve yeşil CI ile biter.
 
 | Faz | Kapsam | Bağımlılık | Çıkış kriteri |
 | --- | --- | --- | --- |
 | **AI-01 Quick fixes** | `analyze`'ı sync/threadpool; Today önerilerini query cache'e; `trusted_hosts` daraltma; `MAX_ITEMS` sabitini config'e; `AGENTS.md`/README güncelle | — | mevcut testler yeşil, app davranışı aynı |
 | **AI-02 Schema migration** | `0002_ai_foundation` (tüm tablolar/alanlar, veri adımı), modeller, `alembic check` CI, Postgres CI servisi | AI-01 | parity testi; eski endpoint'ler aynı çıktıyı veriyor (`item_ids` hâlâ okunuyor) |
-| **AI-03 AI gateway + entitlements** | `app/ai/` paketi, \`providers/anthropic | groq | fake` ,  `routing` ,  `telemetry` ,  `entitlements/` ,  `usage\_counters` ; mevcut iki özellik gateway'den geçer;  `plans\` config |
+| **AI-03 AI gateway + entitlements** | `app/ai/` paketi, `providers/anthropic ∥ groq ∥ fake`, `routing`, `telemetry`, `entitlements/`, `usage_counters`; mevcut iki özellik gateway'den geçer; `plans` config | AI-02 | *(orijinal metinde kayıp — belirlenecek)* |
 | **AI-04 Context + services** | `services/` ayrımı (router incelir), `ai/context.py`, tercih özeti (kural tabanlı), `outfit_items` kullanımı, `GET /meta/vocab`, feedback/worn endpoint'leri (`POST /outfits/{id}/worn`, `POST /outfits` user kombini) | AI-03 | context snapshot testleri; suggest input token'ı ölçüldü |
 | **AI-05 Storage + auth foundation** | R2 private + presigned, `wardrobe_images`, yetim temizliği, blob migration script'i; access/refresh/revoke, doğrulama, sıfırlama, e-posta servisi; app token akışı | AI-02 (şema); e-posta: Resend; alan adı: api.fomertech.com | security testleri; `STORAGE_BACKEND=s3` ile smoke; `0003_cleanup` hazır ama uygulanmamış |
 | **AI-06 Intelligence features** | doğal dil intent, eksik parça analizi, kapsül gardırop (deterministik + açıklama), premium model routing | AI-04 | her feature için şema + fake testi; maliyet ölçümü |

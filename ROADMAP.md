@@ -42,6 +42,7 @@ The original code is preserved on the [`legacy-streamlit`](https://github.com/fa
 - [ ] Neon project, Hugging Face Space `smartwardrobe-api`, secrets
 - [ ] Web build on Vercel → `wardrobe.fomertech.com`, CORS
 - [ ] Fomer site card → Live
+- [ ] Deploy sonrası /auth/demo rate limitinin kullanıcı başına çalıştığını doğrula; gerekirse TRUSTED_PROXY_HOSTS'u Space proxy adresiyle güncelle
 
 ### Phase 4 — Stores
 - [ ] App icon, splash, store screenshots
