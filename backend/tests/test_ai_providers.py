@@ -189,3 +189,20 @@ def test_tagging_schema_coerces_into_vocabularies():
                                      "warmth": 9, "seasons": ["monsoon"], "pattern": "zigzag"})
     assert (out.category, out.colors, out.warmth, out.pattern) == ("dress", ["burgundy", "black", "red"], 5, "solid")
     assert out.seasons == ["spring", "summer", "autumn", "winter"] and out.is_clothing is True
+
+
+def test_anthropic_error_detail_is_the_api_message(claude):
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    body = {"type": "error", "error": {"type": "invalid_request_error", "message": "tools.0.input_schema: bad"}}
+    claude(StubClient(error=anthropic.BadRequestError("Error code: 400 - {...}",
+                                                      response=httpx2.Response(400, request=request), body=body)))
+    with pytest.raises(ProviderError) as e:
+        anthropic_provider.AnthropicProvider().complete_json(CALL, "claude-x")
+    assert (e.value.kind, e.value.message) == ("config", "400 invalid_request_error: tools.0.input_schema: bad")
+
+
+def test_groq_error_detail_is_the_api_message(monkeypatch):
+    _groq(monkeypatch, status=429, payload={"error": {"message": "Rate limit reached for model qwen", "type": "tokens"}})
+    with pytest.raises(ProviderError) as e:
+        groq_provider.GroqProvider().complete_json(CALL, "m")
+    assert e.value.message == "429 tokens: Rate limit reached for model qwen"

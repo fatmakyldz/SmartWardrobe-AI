@@ -110,9 +110,11 @@ def _estimate_tokens(system: str, parts: list[Part], max_output: int) -> int:
 
 
 def _final_error(kinds: list[str]) -> AIError:
-    if kinds and all(k in ("timeout", "rate_limited") for k in kinds):
+    # Models skipped for auth / config errors say nothing about load; judge by the models that ran.
+    ran = [k for k in kinds if k not in ("auth", "config")]
+    if ran and all(k in ("timeout", "rate_limited") for k in ran):
         return AIError("ai_busy")
-    if kinds and all(k == "bad_output" for k in kinds):
+    if ran and all(k == "bad_output" for k in ran):
         return AIError("ai_bad_reply")
     return AIError("ai_unavailable")
 
@@ -166,7 +168,7 @@ def complete(req: AIRequest, *, budget: BudgetGate, telemetry: Telemetry | None 
             started = time.monotonic()
             tokens = (0, 0, 0, 0)  # input, output, cache read, cache write
             data = None
-            kind, error_code = "ok", None
+            kind, error_code, detail = "ok", None, None
             try:
                 result = provider.complete_json(call, cand.model)
                 tokens = (result.input_tokens, result.output_tokens, result.cache_read_tokens, result.cache_write_tokens)
@@ -178,9 +180,12 @@ def complete(req: AIRequest, *, budget: BudgetGate, telemetry: Telemetry | None 
                 # the short provider reason (e.g. "refusal").
                 kind = e.kind
                 error_code = (e.message[:60] or "error") if e.kind == "error" else e.kind
+                detail = e.message or None
                 tokens = (e.input_tokens, e.output_tokens, e.cache_read_tokens, e.cache_write_tokens)
             except (ValidationError, ValueError) as e:
                 kind, error_code = "bad_output", type(e).__name__
+                # A ValidationError's text quotes the model's output, which is never logged.
+                detail = f"{e.error_count()} schema errors" if isinstance(e, ValidationError) else str(e)[:200]
             except Exception as e:  # a provider bug must not take the request down with an unlogged 500
                 log.exception("provider %s crashed", cand.provider)
                 kind, error_code = "error", type(e).__name__
@@ -189,7 +194,7 @@ def complete(req: AIRequest, *, budget: BudgetGate, telemetry: Telemetry | None 
             attempt = AttemptRecord(
                 attempt_no=len(attempts) + 1, provider=cand.provider, model=cand.model, model_class=cand.model_class,
                 status="ok" if kind == "ok" else ("error" if kind in ("auth", "config", "unavailable") else kind),
-                error_code=None if kind == "ok" else error_code,
+                error_code=None if kind == "ok" else error_code, detail=detail,
                 input_tokens=inp + cache_read + cache_write, output_tokens=out,
                 cost_usd_micro=cand.cost_usd_micro(inp, out, cache_read, cache_write),
                 latency_ms=int((time.monotonic() - started) * 1000),
