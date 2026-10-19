@@ -230,6 +230,70 @@ def test_suggest_validates_and_learns(client, fake_weather, monkeypatch):
     assert [o["id"] for o in liked] == [first]
 
 
+def _demo_with_outfit(client, monkeypatch):
+    monkeypatch.setattr("app.ai.chat_json", lambda m, model, **kw: {"outfits": [{"title": "t", "items": [4, 0, 12], "reason": "r"}]})
+    token = client.post("/auth/demo", json={}).json()["token"]
+    h = {"Authorization": f"Bearer {token}"}
+    outfit = client.post("/outfits/suggest", json={}, headers=h).json()["outfits"][0]
+    return h, outfit
+
+
+def test_suggest_writes_outfit_items_alongside_item_ids(client, monkeypatch):
+    import uuid
+
+    from app.db import SessionLocal
+    from app.models import Outfit
+
+    h, outfit = _demo_with_outfit(client, monkeypatch)
+    with SessionLocal() as db:
+        o = db.get(Outfit, uuid.UUID(outfit["id"]))
+        assert o.source == "ai"
+        links = [(oi.position, str(oi.item_id), oi.slot) for oi in o.outfit_items]
+    # same items, same order as item_ids (which the response is still built from)
+    assert links == [(n, i["id"], i["category"]) for n, i in enumerate(outfit["items"])]
+
+
+def test_feedback_updates_rating_and_logs_events(client, monkeypatch):
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import FeedbackEvent
+
+    h, outfit = _demo_with_outfit(client, monkeypatch)
+    for rating in (1, -1, 0):
+        r = client.post(f"/outfits/{outfit['id']}/feedback", json={"rating": rating}, headers=h)
+        assert r.status_code == 200 and r.json()["rating"] == rating
+    assert client.get("/outfits", headers=h).json()[0]["rating"] == 0
+    with SessionLocal() as db:
+        events = db.scalars(select(FeedbackEvent).order_by(FeedbackEvent.created_at)).all()
+        assert [(e.kind, str(e.outfit_id), e.item_id) for e in events] == [
+            ("like", outfit["id"], None), ("dislike", outfit["id"], None), ("unrate", outfit["id"], None)
+        ]
+
+
+def test_deleting_item_drops_its_outfit_items(client, monkeypatch):
+    import uuid
+
+    from sqlalchemy import func, select
+
+    from app.db import SessionLocal
+    from app.models import FeedbackEvent, OutfitItem
+
+    h, outfit = _demo_with_outfit(client, monkeypatch)
+    client.post(f"/outfits/{outfit['id']}/feedback", json={"rating": 1}, headers=h)
+    gone = outfit["items"][1]["id"]
+    assert client.delete(f"/items/{gone}", headers=h).status_code == 204
+
+    with SessionLocal() as db:
+        left = db.scalars(select(OutfitItem.item_id).where(OutfitItem.outfit_id == uuid.UUID(outfit["id"]))).all()
+        assert sorted(map(str, left)) == sorted(i["id"] for i in outfit["items"] if i["id"] != gone)
+        assert db.scalar(select(func.count()).select_from(OutfitItem).where(OutfitItem.item_id == uuid.UUID(gone))) == 0
+        assert db.scalar(select(func.count()).select_from(FeedbackEvent)) == 1
+    # the outfit is still served from item_ids, without the deleted piece (as before)
+    saved = client.get("/outfits", headers=h).json()[0]
+    assert [i["id"] for i in saved["items"]] == [i["id"] for i in outfit["items"] if i["id"] != gone]
+
+
 def test_suggest_without_weather_still_works(client, monkeypatch):
     from fastapi import HTTPException
 
@@ -282,18 +346,20 @@ def test_trusted_proxy_hosts_setting(monkeypatch):
 
 # ── account deletion ────────────────────────────────────────────────────
 
-def test_delete_account_removes_everything(client):
+def test_delete_account_removes_everything(client, monkeypatch):
     from app.db import SessionLocal
-    from app.models import Item, StoredImage, User
+    from app.models import FeedbackEvent, Item, Outfit, OutfitItem, StoredImage, User
 
+    monkeypatch.setattr("app.ai.chat_json", lambda m, model, **kw: {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]})
     token = client.post("/auth/demo", json={}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
+    outfit = client.post("/outfits/suggest", json={}, headers=h).json()["outfits"][0]
+    client.post(f"/outfits/{outfit['id']}/feedback", json={"rating": 1}, headers=h)
     assert client.delete("/me", headers=h).status_code == 204
     assert client.get("/me", headers=h).status_code == 401
     with SessionLocal() as db:
-        assert db.query(User).count() == 0
-        assert db.query(Item).count() == 0
-        assert db.query(StoredImage).count() == 0
+        for model in (User, Item, StoredImage, Outfit, OutfitItem, FeedbackEvent):
+            assert db.query(model).count() == 0, model.__tablename__
 
 
 def test_rate_limit_on_suggest(client, fake_weather, monkeypatch):

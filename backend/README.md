@@ -23,6 +23,38 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000/docs
 pytest
 ```
 
+## Database migrations
+
+Schema changes are Alembic revisions in `migrations/versions/`. The Docker image runs `alembic upgrade head` on every start, so **a merge to `main` migrates the production database on the next Space deploy**.
+
+```bash
+alembic upgrade head            # apply
+alembic downgrade -1            # undo the last revision
+alembic check                   # models and database agree (CI runs this on Postgres)
+alembic revision --autogenerate -m "..."   # new revision; review it before committing
+```
+
+Tests run on SQLite by default; set `TEST_DATABASE_URL` to run the same suite on Postgres (a separate variable, so a `DATABASE_URL` you exported for real work is never wiped by the tests):
+
+```bash
+TEST_DATABASE_URL=postgresql://postgres@localhost:5432/sw_test pytest -q
+```
+
+### Before deploying `0002_ai_foundation`
+
+It adds fields to `users` / `items` / `outfits`, ten new tables, and copies `outfits.item_ids` → `outfit_items` and ratings → `feedback_events` (`outfits.item_ids` and `images` stay until `0003_cleanup`). On the production database (Neon), before the deploy:
+
+1. Take a Neon branch (snapshot) to roll back to.
+2. Clear expired demo accounts so they aren't migrated: `python -c "from app.db import SessionLocal; from app.demo import cleanup_expired_demos as c; db = SessionLocal(); print(c(db))"` (deletes up to 50 per run; repeat until it prints 0).
+3. Count real accounts: `SELECT count(*) FROM users WHERE NOT is_demo;`
+4. Deploy (merge to `main`) — the container runs the migration.
+5. If step 3 found real accounts, mark them verified so they aren't locked out once AI features require a verified email (decision C1):
+   ```bash
+   python scripts/mark_existing_verified.py           # dry run: prints counts
+   python scripts/mark_existing_verified.py --apply   # email_verified_at = created_at (demo accounts skipped)
+   ```
+   This is deliberately not part of the migration; it is idempotent and can run any time before AI-05 ships.
+
 ## Endpoints
 
 | Method | Path | |

@@ -17,6 +17,8 @@
 # backend (Python 3.13)
 cd backend && pip install -r requirements-dev.txt
 pytest -q                       # SQLite + TestClient; LLM calls are monkeypatched
+TEST_DATABASE_URL=postgresql://… pytest -q   # same suite on Postgres (CI does both)
+alembic upgrade head && alembic check        # migrations match the models
 
 # app (Node 22)
 cd app && npm ci
@@ -24,7 +26,7 @@ npm run typecheck && npm run lint
 npm run export:web              # what CI builds
 ```
 
-CI (`.github/workflows/`) runs the same: `pytest -q` for `backend/**`, typecheck + lint + web export for `app/**`.
+CI (`.github/workflows/`) runs the same: `pytest -q` on SQLite and Postgres plus migrations up/down/up with `alembic check` for `backend/**`; typecheck + lint + web export for `app/**`.
 
 ## Rules of thumb
 

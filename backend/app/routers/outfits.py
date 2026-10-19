@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .. import ai
 from ..config import get_settings
 from ..db import get_db
-from ..models import Item, Outfit, User
+from ..models import FeedbackEvent, Item, Outfit, OutfitItem, User
 from ..ratelimit import limiter
 from ..schemas import FeedbackIn, OutfitOut, SuggestIn, SuggestOut, WeatherOut
 from ..security import current_user
@@ -59,6 +59,7 @@ def suggest(request: Request, body: SuggestIn, user: User = Depends(current_user
             title=sug["title"],
             reason=sug["reason"],
             lang=body.lang,
+            outfit_items=[OutfitItem(item=i, position=n, slot=i.category) for n, i in enumerate(sug["items"])],
         )
         db.add(outfit)
         saved.append(outfit)
@@ -86,5 +87,7 @@ def feedback(outfit_id: uuid.UUID, body: FeedbackIn, user: User = Depends(curren
     if outfit is None or outfit.user_id != user.id:
         raise HTTPException(404, detail={"code": "not_found"})
     outfit.rating = body.rating
+    kind = {1: "like", -1: "dislike", 0: "unrate"}[body.rating]
+    db.add(FeedbackEvent(user_id=user.id, outfit_id=outfit.id, kind=kind))
     db.commit()
     return outfit_out(outfit, _items_by_id(user))

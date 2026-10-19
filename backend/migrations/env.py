@@ -13,12 +13,30 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _run(connection) -> None:
+    sqlite = connection.dialect.name == "sqlite"
+    if sqlite:
+        # Batch mode rebuilds tables (copy → drop → rename); with foreign keys enforced, dropping
+        # a parent table would cascade-delete its children. Must be set outside a transaction.
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.commit()  # the PRAGMA autobegins a transaction; end it so Alembic owns the next one
+    context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=sqlite)
+    with context.begin_transaction():
+        context.run_migrations()
+    if sqlite:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        connection.commit()
+
+
 def run_migrations_online() -> None:
+    # Tests pass their own connection (config.attributes["connection"]).
+    connection = context.config.attributes.get("connection")
+    if connection is not None:
+        _run(connection)
+        return
     engine = make_engine(get_settings().database_url)
     with engine.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
-        with context.begin_transaction():
-            context.run_migrations()
+        _run(connection)
 
 
 if context.is_offline_mode():
