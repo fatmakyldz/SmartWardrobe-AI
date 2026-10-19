@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, useWindowDimensions, View } from 'react-native';
@@ -10,7 +10,7 @@ import { api, Occasion, OCCASIONS, Outfit } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useErrorText } from '@/lib/errors';
 import { skyKey, useI18n } from '@/lib/i18n';
-import { patchOutfit, useFeedback, useItems } from '@/lib/queries';
+import { useFeedback, useItems, useLatestOutfits, useSuggest } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
 
 export default function Today() {
@@ -23,10 +23,10 @@ export default function Today() {
 
   const [occasion, setOccasion] = useState<Occasion>('casual');
   const [note, setNote] = useState('');
-  const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [pickingCity, setPickingCity] = useState(false);
 
   const items = useItems();
+  const outfits = useLatestOutfits().data;
   const hasLocation = user?.lat != null && user?.lon != null;
   const weather = useQuery({
     queryKey: ['weather', user?.lat, user?.lon],
@@ -35,10 +35,7 @@ export default function Today() {
     staleTime: 15 * 60_000,
   });
 
-  const suggest = useMutation({
-    mutationFn: () => api.suggest({ occasion, note: note.trim(), lang }),
-    onSuccess: (res) => setOutfits(res.outfits),
-  });
+  const suggest = useSuggest();
   const feedback = useFeedback();
 
   const cats = new Set((items.data ?? []).map((i) => i.category));
@@ -50,9 +47,7 @@ export default function Today() {
   }
 
   function rate(o: Outfit, r: -1 | 1) {
-    const rating = o.rating === r ? 0 : r;
-    setOutfits((list) => patchOutfit(list, { ...o, rating }));
-    feedback.mutate({ id: o.id, rating });
+    feedback.mutate({ id: o.id, rating: o.rating === r ? 0 : r });
   }
 
   const w = weather.data;
@@ -122,7 +117,7 @@ export default function Today() {
             loading={suggest.isPending}
             onPress={() => {
               tap();
-              suggest.mutate();
+              suggest.mutate({ occasion, note: note.trim(), lang });
             }}
           />
         </View>

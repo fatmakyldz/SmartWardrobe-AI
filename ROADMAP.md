@@ -48,3 +48,10 @@ The original code is preserved on the [`legacy-streamlit`](https://github.com/fa
 - [ ] Privacy policy page (photos, account data, AI processing)
 - [ ] EAS builds → TestFlight + Google Play internal testing
 - [ ] Store listings (EN/TR) and review submission
+
+### Phase AI — AI foundation
+Design: [`docs/AI-00-foundation.md`](docs/AI-00-foundation.md) — Claude primary + Groq fallback, AI gateway, entitlements (Free 50 items / 5 suggestions a day, Premium 300), private R2 storage, email auth with refresh tokens, onboarding. Each phase is one PR: tests → report → review → merge.
+
+- [x] AI-00 Foundation design — approved 19 Oct 2026
+- [ ] AI-01 Quick fixes — `analyze` off the event loop, Today suggestions in the query cache, trusted proxy list, `MAX_ITEMS` in config, CLAUDE.md *(this PR)*
+- [ ] AI-02 … AI-09 — schema migration, gateway + entitlements, context + services, storage + auth, intelligence features, onboarding, entitlements UI, V1.0 hardening; scope and order in the design doc (§13)

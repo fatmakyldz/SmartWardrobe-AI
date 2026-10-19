@@ -121,6 +121,70 @@ def test_ai_not_configured(client, auth, monkeypatch):
     assert r.status_code == 503 and r.json()["detail"]["code"] == "ai_not_configured"
 
 
+def test_analyze_runs_off_the_event_loop(client, auth, monkeypatch):
+    import asyncio
+
+    import app.routers.items as items_router
+
+    def on_loop() -> bool:
+        try:
+            asyncio.get_running_loop()
+            return True
+        except RuntimeError:
+            return False
+
+    seen = {}
+    real_normalize = items_router.normalize
+
+    def spy_normalize(raw, max_mb):
+        seen["normalize"] = on_loop()
+        return real_normalize(raw, max_mb)
+
+    def spy_chat(messages, model, **kw):
+        seen["llm"] = on_loop()
+        return {"is_clothing": True, "category": "top"}
+
+    monkeypatch.setattr(items_router, "normalize", spy_normalize)
+    monkeypatch.setattr("app.ai.chat_json", spy_chat)
+    r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=auth)
+    assert r.status_code == 200, r.text
+    # Pillow and the Groq call must run in the threadpool, not on the event loop.
+    assert seen == {"normalize": False, "llm": False}
+
+
+def test_rejects_too_large_image(client, auth, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "max_upload_mb", 1)
+    big = b"\0" * (1024 * 1024 + 10)
+    r = client.post("/items/analyze", files={"image": ("big.png", big, "image/png")}, headers=auth)
+    assert r.status_code == 413 and r.json()["detail"]["code"] == "image_too_large"
+
+
+def test_wardrobe_full_uses_max_items_setting(client, monkeypatch):
+    from app.config import get_settings
+
+    token = client.post("/auth/demo", json={}).json()["token"]
+    h = {"Authorization": f"Bearer {token}"}
+    items = client.get("/items", headers=h).json()
+    key = items[0]["image_url"].split("/images/")[1]
+
+    monkeypatch.setattr(get_settings(), "max_items", len(items))
+    r = client.post("/items", json={"image_key": key, "category": "top"}, headers=h)
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "wardrobe_full"
+
+    monkeypatch.setattr(get_settings(), "max_items", len(items) + 1)
+    assert client.post("/items", json={"image_key": key, "category": "top"}, headers=h).status_code == 201
+
+
+def test_max_items_default_and_env_override(monkeypatch):
+    from app.config import Settings
+
+    assert Settings().max_items == 300
+    monkeypatch.setenv("MAX_ITEMS", "50")
+    assert Settings().max_items == 50
+
+
 # ── outfits ─────────────────────────────────────────────────────────────
 
 def test_suggest_needs_complete_wardrobe(client, auth):
@@ -177,6 +241,43 @@ def test_suggest_without_weather_still_works(client, monkeypatch):
     token = client.post("/auth/demo", json={}).json()["token"]
     r = client.post("/outfits/suggest", json={}, headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200 and r.json()["weather"] is None
+
+
+# ── proxy headers ───────────────────────────────────────────────────────
+
+def _demo_codes(remote_ip: str, forwarded_for: list[str]) -> list[int]:
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    c = TestClient(app, client=(remote_ip, 50000))
+    return [c.post("/auth/demo", json={}, headers={"X-Forwarded-For": ip}).status_code for ip in forwarded_for]
+
+
+def test_spoofed_forwarded_for_cannot_skip_rate_limit(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "demo_limit", "2/hour")
+    # A direct (non-proxy) caller rotating X-Forwarded-For still shares one bucket.
+    assert _demo_codes("203.0.113.7", ["1.1.1.1", "2.2.2.2", "3.3.3.3"]) == [201, 201, 429]
+
+
+def test_trusted_proxy_forwarded_for_is_used(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "demo_limit", "1/hour")
+    # Behind the Space's load balancer (private address) each real client gets its own bucket.
+    assert _demo_codes("10.16.0.4", ["198.51.100.1", "198.51.100.2", "198.51.100.1"]) == [201, 201, 429]
+
+
+def test_trusted_proxy_hosts_setting(monkeypatch):
+    from app.config import Settings
+
+    assert "*" not in Settings().trusted_proxy_list
+    monkeypatch.setenv("TRUSTED_PROXY_HOSTS", "")
+    assert Settings().trusted_proxy_list == ["127.0.0.1", "::1"]
+    monkeypatch.setenv("TRUSTED_PROXY_HOSTS", " 10.0.0.0/8 , 127.0.0.1 ")
+    assert Settings().trusted_proxy_list == ["10.0.0.0/8", "127.0.0.1"]
 
 
 # ── account deletion ────────────────────────────────────────────────────

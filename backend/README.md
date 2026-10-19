@@ -41,6 +41,18 @@ pytest
 
 Errors use `{"detail": {"code": "..."}}` so the app can show translated messages.
 
+## Behind a proxy
+
+Rate limits for anonymous endpoints (`/auth/register`, `/auth/login`, `/auth/demo`) are keyed by client IP. The app reads the real IP from `X-Forwarded-For` **only** when the connection comes from a host in `TRUSTED_PROXY_HOSTS` (comma-separated IPs or CIDRs):
+
+- Default `127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` — local runs and the Hugging Face Space load balancer, which connects from a private address.
+- Empty — loopback only.
+- Never `*`: any caller could then send a fake `X-Forwarded-For` and get a fresh rate-limit bucket on every request.
+
+uvicorn's own proxy handling is turned off in the `Dockerfile` (`--no-proxy-headers`) so this setting is the single place that decides. If the host changes, check the address the proxy connects from (`request.client.host` without the middleware) and set the variable.
+
+Other limits: `MAX_ITEMS` (pieces per wardrobe, default 300), `MAX_UPLOAD_MB` (default 10), `ANALYZE_LIMIT` / `SUGGEST_LIMIT` / `DEMO_LIMIT`.
+
 ## How the AI parts work
 
 - **Tagging** — the photo is re-encoded (EXIF/GPS stripped), downscaled, and sent to a Groq vision model (`GROQ_VISION_MODEL`, default `qwen/qwen3.8-27b`) in JSON mode. Every field is coerced into fixed vocabularies (`app/vocab.py`), and the user confirms before saving.
