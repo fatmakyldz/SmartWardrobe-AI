@@ -37,3 +37,22 @@ def test_report_summarises_yesterday():
     assert "failure codes: timeout 1" in text
     with engine.connect() as conn:
         assert "No AI requests." in ai_report.report(conn, date(2026, 10, 1))
+
+
+def test_weekly_report_shows_real_to_estimate_ratio():
+    days = [datetime(2026, 10, d, 9, tzinfo=timezone.utc) for d in (12, 15, 18)]
+    with SessionLocal() as db:
+        for d, est in zip(days, (1000, 1000, None)):  # the last one predates the estimate column
+            r = _req("suggest", "ok", 100, 4000, [("anthropic", "sonnet", "ok")], day=d)
+            r.estimated_input_tokens = est
+            db.add(r)
+        budget = _req("suggest", "budget", 0, 0, [], day=days[0])
+        budget.estimated_input_tokens = 5000  # never answered: left out of the ratio
+        db.add(budget)
+        db.commit()
+    with engine.connect() as conn:
+        text = ai_report.report(conn, date(2026, 10, 12), days=7)
+    assert text.startswith("AI report for 2026-10-12 – 2026-10-18 (UTC)") and "requests 4" in text
+    assert "suggest: 1.00 over 2 requests" in text  # 2000 real / 2000 estimated
+    with engine.connect() as conn:
+        assert "requests 1 " in ai_report.report(conn, date(2026, 10, 18))

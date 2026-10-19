@@ -376,3 +376,25 @@ def test_schema_errors_are_logged_without_the_model_output(caplog):
     with caplog.at_level(logging.INFO, logger="ai"):
         complete(tag_request(), budget=Gate())
     assert "SECRET MODEL TEXT" not in caplog.text and "schema errors" in caplog.text
+
+
+def test_budget_estimate_scales_text_and_adds_fixed_part():
+    from app.ai import gateway
+
+    seen = {}
+
+    class Recording(Gate):
+        def check(self, feature, estimated_tokens):
+            seen["est"] = estimated_tokens
+            return self.decision
+
+    FAKE.script("fake-vision-a", TAGS)
+    req = tag_request(user_content=[TextPart("x" * 400)])  # no image
+    complete(req, budget=Recording())
+    system_chars = len(gateway.registry.get("tagging", "v1").render(req.system_vars))
+    expected_input = round((system_chars + 400) / 4 * 2.5) + 600
+    assert seen["est"] == expected_input + req.max_output_tokens
+    reqs, _ = rows()
+    assert reqs[0].estimated_input_tokens == expected_input
+    with_image = gateway.estimate_input_tokens("", [ImagePart(b"x")])
+    assert with_image == 600 + gateway.IMAGE_TOKENS_ESTIMATE

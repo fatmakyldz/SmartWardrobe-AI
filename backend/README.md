@@ -42,7 +42,7 @@ TEST_DATABASE_URL=postgresql://postgres@localhost:5432/sw_test pytest -q
 
 ### Before deploying `0002_ai_foundation`
 
-It adds fields to `users` / `items` / `outfits`, ten new tables, and copies `outfits.item_ids` → `outfit_items` and ratings → `feedback_events` (`outfits.item_ids` and `images` stay until `0003_cleanup`). On the production database (Neon), before the deploy:
+It adds fields to `users` / `items` / `outfits`, ten new tables, and copies `outfits.item_ids` → `outfit_items` and ratings → `feedback_events` (`outfits.item_ids` and `images` stay until the cleanup revision — called `0003_cleanup` in the design, now the next free number since `0003_ai_estimate` took 0003). On the production database (Neon), before the deploy:
 
 1. Take a Neon branch (snapshot) to roll back to.
 2. Clear expired demo accounts so they aren't migrated — **from a checkout of the current `main`** (this branch's models expect the 0002 columns): `python -c "from app.db import SessionLocal; from app.demo import cleanup_expired_demos as c; db = SessionLocal(); print(c(db))"` (deletes up to 50 per run; repeat until it prints 0).
@@ -133,7 +133,8 @@ router → entitlements (plan, feature allowed?) → features/{tagging,suggest} 
 - **Retries and fallback**: a timeout or rate limit is retried once on the same model, an answer that fails the schema is retried once with a "fix the format" note, anything else moves to the next model. A provider failing 5 times in 5 minutes goes to the end of the chain for 2 minutes.
 - **Output** is never trusted: Claude must answer through one strict tool, Groq in JSON mode, and every answer is validated and coerced into the fixed vocabularies (`app/ai/schemas/`, `app/vocab.py`). Outfits may only use the user's own item numbers. The LLM never writes to the database.
 - **Prompts** are versioned files in `app/ai/prompts/<feature>/vN.md`; outfits store the prompt version and the `ai_requests` id. Suggestions use `suggest/v2` (same system text as v1, the §6 context).
-- **Telemetry**: one `ai_requests` row per request and one `ai_request_attempts` row per provider call (tokens, cost, latency, status), plus a JSON log line per attempt. Prompts, photos and notes are never logged — only a prompt hash and token counts. `python scripts/ai_report.py [--date YYYY-MM-DD]` prints a day's cost, latency, fallback and error summary.
+- **Telemetry**: one `ai_requests` row per request and one `ai_request_attempts` row per provider call (tokens, cost, latency, status), plus a JSON log line per attempt. Prompts, photos and notes are never logged — only a prompt hash and token counts. `python scripts/ai_report.py [--date YYYY-MM-DD] [--days 7]` prints cost, latency, fallback and error rates for a day (or a week), and the real-input / budget-estimate ratio per feature.
+- **Budget estimate**: before calling out, the gateway estimates input tokens as text chars / 4 × 2.5 + 600 (tool schema and instructions) + 1 600 per image, and stores it in `ai_requests.estimated_input_tokens`. Only the budget check uses it; the counters always get the real tokens. If the weekly ratio drifts far from 1, adjust `TEXT_TOKEN_FACTOR` / `FIXED_INPUT_TOKENS` in `app/ai/gateway.py`.
 
 ## Plans and limits
 

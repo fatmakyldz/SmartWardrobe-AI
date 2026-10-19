@@ -27,8 +27,9 @@ class SuggestOut(BaseModel):
                     items.append(int(x))
                 except (ValueError, TypeError):
                     continue  # hallucinated id
-            outfits.append({"title": str(o.get("title") or "")[:120], "items": items,
-                            "reason": str(o.get("reason") or "")[:600]})
+            # Models sometimes end a field with a newline; strip before storing.
+            outfits.append({"title": str(o.get("title") or "").strip()[:120], "items": items,
+                            "reason": str(o.get("reason") or "").strip()[:600]})
         return {"outfits": outfits}
 
     @classmethod

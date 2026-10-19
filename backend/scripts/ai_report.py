@@ -1,8 +1,10 @@
-"""Daily AI summary from ai_requests / ai_request_attempts: cost, tokens and latency by feature,
-fallback / error / budget rates, failures by provider. Read-only.
+"""AI summary from ai_requests / ai_request_attempts: cost, tokens and latency by feature,
+fallback / error / budget rates, failures by provider, and how the budget's input estimate compares
+with the real input tokens. Read-only.
 
-    python scripts/ai_report.py                  # yesterday (UTC)
+    python scripts/ai_report.py                          # yesterday (UTC)
     python scripts/ai_report.py --date 2026-10-19
+    python scripts/ai_report.py --days 7                 # the 7 days up to yesterday (weekly)
 """
 
 import argparse
@@ -30,9 +32,10 @@ def _p(values: list[int], q: float) -> int:
     return values[min(len(values) - 1, int(round(q * (len(values) - 1))))]
 
 
-def report(conn: sa.Connection, day: date) -> str:
+def report(conn: sa.Connection, day: date, days: int = 1) -> str:
+    """Covers [day, day + days)."""
     start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    end = start + timedelta(days=1)
+    end = start + timedelta(days=days)
     reqs = conn.execute(sa.select(AIRequest.__table__).where(AIRequest.created_at >= start,
                                                              AIRequest.created_at < end)).all()
     atts = conn.execute(
@@ -41,7 +44,8 @@ def report(conn: sa.Connection, day: date) -> str:
         .where(AIRequest.created_at >= start, AIRequest.created_at < end)
     ).all()
 
-    lines = [f"AI report for {day.isoformat()} (UTC)", ""]
+    period = day.isoformat() if days == 1 else f"{day.isoformat()} – {(day + timedelta(days=days - 1)).isoformat()}"
+    lines = [f"AI report for {period} (UTC)", ""]
     if not reqs:
         return "\n".join(lines + ["No AI requests."])
 
@@ -67,6 +71,16 @@ def report(conn: sa.Connection, day: date) -> str:
             f"{_p(lat, 0.5):>9}{_p(lat, 0.95):>9}"
         )
 
+    lines += ["", "input tokens: real / budget estimate (answered requests with an estimate):"]
+    for feature, rows in sorted(by_feature.items()):
+        est = [r for r in rows if r.estimated_input_tokens and r.status in ("ok", "fallback")]
+        if est:
+            ratio = sum(r.input_tokens_total for r in est) / sum(r.estimated_input_tokens for r in est)
+            lines.append(f"  {feature}: {ratio:.2f} over {len(est)} requests "
+                         f"(< 1: estimate too high; > 1: too low, raise TEXT_TOKEN_FACTOR)")
+        else:
+            lines.append(f"  {feature}: -")
+
     lines += ["", "attempts by model:"]
     by_model = defaultdict(Counter)
     for a in atts:
@@ -86,14 +100,15 @@ def report(conn: sa.Connection, day: date) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--date", type=date.fromisoformat,
+    parser.add_argument("--date", type=date.fromisoformat, help="last day of the period (default: yesterday)",
                         default=datetime.now(timezone.utc).date() - timedelta(days=1))
+    parser.add_argument("--days", type=int, default=1, help="period length in days, e.g. 7 for a weekly report")
     args = parser.parse_args()
 
     from app.db import engine
 
     with engine.connect() as conn:
-        print(report(conn, args.date))
+        print(report(conn, args.date - timedelta(days=args.days - 1), args.days))
 
 
 if __name__ == "__main__":

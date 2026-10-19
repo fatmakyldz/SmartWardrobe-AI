@@ -31,6 +31,11 @@ REPAIR_NOTE = (
     "object that follows the instructions; use only the item numbers listed."
 )
 IMAGE_TOKENS_ESTIMATE = 1600
+# chars/4 undercounts what providers bill: measured on the live suggest route, real input was ~2.5x the
+# text estimate, plus a fixed part for the tool schema and instructions. Only the pre-call budget check
+# uses this; consume() always records the real tokens. scripts/ai_report.py shows the real/estimate ratio.
+TEXT_TOKEN_FACTOR = 2.5
+FIXED_INPUT_TOKENS = 600
 
 
 class BudgetDecisionLike(Protocol):
@@ -103,10 +108,10 @@ IDEMPOTENCY = _Idempotency()
 sleep = time.sleep  # tests patch this
 
 
-def _estimate_tokens(system: str, parts: list[Part], max_output: int) -> int:
+def estimate_input_tokens(system: str, parts: list[Part]) -> int:
     chars = len(system) + sum(len(p.text) for p in parts if isinstance(p, TextPart))
     images = sum(1 for p in parts if isinstance(p, ImagePart))
-    return chars // 4 + images * IMAGE_TOKENS_ESTIMATE + max_output
+    return round(chars / 4 * TEXT_TOKEN_FACTOR) + FIXED_INPUT_TOKENS + images * IMAGE_TOKENS_ESTIMATE
 
 
 def _final_error(kinds: list[str]) -> AIError:
@@ -138,9 +143,10 @@ def complete(req: AIRequest, *, budget: BudgetGate, telemetry: Telemetry | None 
     def record(status: str, attempts: list[AttemptRecord], final: AttemptRecord | None = None) -> bool:
         return telemetry.record(RequestRecord(id=request_id, subject_id=req.subject_id, feature=req.feature,
                                        prompt_version=req.prompt_version, prompt_hash=phash, status=status,
-                                       attempts=attempts, final=final))
+                                       attempts=attempts, final=final, estimated_input_tokens=estimated_input))
 
-    decision = budget.check(req.feature, _estimate_tokens(system, req.user_content, req.max_output_tokens))
+    estimated_input = estimate_input_tokens(system, req.user_content)
+    decision = budget.check(req.feature, estimated_input + req.max_output_tokens)
     if not decision.allowed:
         record("budget", [])
         raise AIError("budget_exceeded", reset_at=decision.reset_at,

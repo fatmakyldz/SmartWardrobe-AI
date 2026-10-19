@@ -206,3 +206,8 @@ def test_groq_error_detail_is_the_api_message(monkeypatch):
     with pytest.raises(ProviderError) as e:
         groq_provider.GroqProvider().complete_json(CALL, "m")
     assert e.value.message == "429 tokens: Rate limit reached for model qwen"
+
+
+def test_suggest_titles_and_reasons_are_trimmed():
+    out = SuggestOut.model_validate({"outfits": [{"title": "  Şık ofis \n", "items": [1], "reason": "Serin gün.\n\n"}]})
+    assert (out.outfits[0].title, out.outfits[0].reason) == ("Şık ofis", "Serin gün.")

@@ -42,6 +42,7 @@ class RequestRecord:
     status: str  # ok / fallback / error / budget
     attempts: list[AttemptRecord]
     final: AttemptRecord | None = None
+    estimated_input_tokens: int | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -89,6 +90,7 @@ class Telemetry:
             attempts_count=len(r.attempts),
             fallback_used=r.status == "fallback",
             prompt_hash=r.prompt_hash,
+            estimated_input_tokens=r.estimated_input_tokens,
             created_at=r.created_at,
         )
         row.attempts = [

@@ -180,6 +180,8 @@ class AIRequest(Base):
     attempts_count: Mapped[int] = mapped_column(Integer, default=0)
     fallback_used: Mapped[bool] = mapped_column(Boolean, default=False)
     prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The gateway's pre-call input estimate, kept to calibrate it against input_tokens_total.
+    estimated_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     attempts: Mapped[list["AIRequestAttempt"]] = relationship(
