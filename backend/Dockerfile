@@ -15,5 +15,6 @@ USER app
 ENV PORT=7860
 EXPOSE 7860
 
-# Apply database migrations, then serve.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'"]
+# Apply database migrations, then serve. Proxy headers are handled inside the app
+# (TRUSTED_PROXY_HOSTS), so uvicorn's own handling is off.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --no-proxy-headers"]

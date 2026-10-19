@@ -18,12 +18,10 @@ from ..vocab import COLORS, PATTERNS, SEASONS, keep_known, one_of
 
 router = APIRouter(prefix="/items", tags=["items"])
 
-MAX_ITEMS = 300
-
 
 @router.post("/analyze", response_model=AnalyzeOut)
 @limiter.limit(lambda: get_settings().analyze_limit)
-async def analyze(
+def analyze(
     request: Request,
     image: UploadFile = File(...),
     lang: str = Form("en"),
@@ -31,8 +29,10 @@ async def analyze(
     db: Session = Depends(get_db),
 ):
     """Store the photo and let the vision model pre-fill the tags. The user confirms with POST /items."""
+    # Plain `def`: FastAPI runs it in the threadpool, so Pillow, the storage upload,
+    # the DB commit and the Groq call never block the event loop.
     s = get_settings()
-    raw = await image.read(s.max_upload_mb * 1024 * 1024 + 1)
+    raw = image.file.read(s.max_upload_mb * 1024 * 1024 + 1)
     stored, small = normalize(raw, s.max_upload_mb)
 
     key = new_key(user.id)
@@ -60,7 +60,7 @@ def create_item(body: ItemIn, user: User = Depends(current_user), db: Session = 
     # The key must be one this user uploaded via /items/analyze.
     if not body.image_key.startswith(f"u/{user.id.hex}/"):
         raise HTTPException(400, detail={"code": "invalid_image"})
-    if len(user.items) >= MAX_ITEMS:
+    if len(user.items) >= get_settings().max_items:
         raise HTTPException(400, detail={"code": "wardrobe_full"})
     item = Item(user_id=user.id, **_clean(body.model_dump()))
     db.add(item)

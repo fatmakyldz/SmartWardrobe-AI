@@ -25,7 +25,7 @@ app = FastAPI(
 app.state.limiter = limiter
 
 # Real client IPs behind the hosting proxy (rate limits for anonymous endpoints).
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxy_list)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_list or ["*"],
