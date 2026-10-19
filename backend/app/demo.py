@@ -53,6 +53,7 @@ def create_demo_user(db: Session, locale: str) -> User:
         lat=DEMO_LAT,
         lon=DEMO_LON,
         is_demo=True,
+        plan="demo",
     )
     db.add(user)
     db.flush()

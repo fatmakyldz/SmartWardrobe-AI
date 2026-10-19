@@ -1,4 +1,3 @@
-import base64
 import io
 import uuid
 
@@ -49,6 +48,3 @@ def normalize(raw: bytes, max_mb: int) -> tuple[bytes, bytes]:
 def new_key(user_id: uuid.UUID, ext: str = "webp") -> str:
     return f"u/{user_id.hex}/{uuid.uuid4().hex}.{ext}"
 
-
-def data_url(jpeg: bytes) -> str:
-    return "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()

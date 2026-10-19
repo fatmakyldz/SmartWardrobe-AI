@@ -1,13 +1,15 @@
+import hashlib
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import ai
+from ..ai.features import tagging
 from ..config import get_settings
 from ..db import get_db
-from ..images import data_url, new_key, normalize
+from ..entitlements import UserBudget, entitlements, require_feature
+from ..images import new_key, normalize
 from ..models import Item, User
 from ..ratelimit import limiter
 from ..schemas import AnalyzeOut, ItemIn, ItemOut, ItemUpdate, Tags
@@ -25,22 +27,31 @@ def analyze(
     request: Request,
     image: UploadFile = File(...),
     lang: str = Form("en"),
+    idempotency_key: str | None = Header(default=None, max_length=100),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     """Store the photo and let the vision model pre-fill the tags. The user confirms with POST /items."""
     # Plain `def`: FastAPI runs it in the threadpool, so Pillow, the storage upload,
-    # the DB commit and the Groq call never block the event loop.
+    # the DB commit and the model call never block the event loop.
+    ent = entitlements(user, db)
+    require_feature(ent, "tagging")
+
     s = get_settings()
     raw = image.file.read(s.max_upload_mb * 1024 * 1024 + 1)
     stored, small = normalize(raw, s.max_upload_mb)
+    lang = "tr" if lang == "tr" else "en"
 
     key = new_key(user.id)
     storage = get_storage()
     storage.put(db, key, stored, "image/webp")
     db.commit()
 
-    tags = ai.tag_image(data_url(small), "tr" if lang == "tr" else "en")
+    # The same photo sent twice within a minute (double tap, retry) is tagged once.
+    same_photo = idempotency_key or f"{hashlib.sha256(small).hexdigest()}:{lang}"
+    out, _ = tagging.tag_image(small, lang, subject_id=user.id, tier=ent.model_tier,
+                               budget=UserBudget(user, ent), idempotency_key=same_photo)
+    tags = out.model_dump()
     is_clothing = tags.pop("is_clothing")
     return AnalyzeOut(image_key=key, image_url=storage.url(key), is_clothing=is_clothing, tags=Tags(**tags))
 
@@ -60,7 +71,7 @@ def create_item(body: ItemIn, user: User = Depends(current_user), db: Session = 
     # The key must be one this user uploaded via /items/analyze.
     if not body.image_key.startswith(f"u/{user.id.hex}/"):
         raise HTTPException(400, detail={"code": "invalid_image"})
-    if len(user.items) >= get_settings().max_items:
+    if len(user.items) >= entitlements(user, db).max_items:
         raise HTTPException(400, detail={"code": "wardrobe_full"})
     item = Item(user_id=user.id, **_clean(body.model_dump()))
     db.add(item)

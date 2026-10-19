@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from .ai import AIError
 from .config import get_settings
 from .ratelimit import limiter
 from .routers import auth, items, me, misc, outfits
@@ -16,6 +17,8 @@ settings = get_settings()
 
 if not settings.database_url.startswith("sqlite") and settings.secret_key == "dev-only-change-me":
     raise RuntimeError("Set SECRET_KEY to a long random value before running against a real database.")
+if not settings.database_url.startswith("sqlite") and settings.ai_debug_log:
+    raise RuntimeError("AI_DEBUG_LOG prints full prompts; it is only allowed with a local SQLite database.")
 
 app = FastAPI(
     title="SmartWardrobe API",
@@ -37,6 +40,11 @@ app.add_middleware(
 @app.exception_handler(RateLimitExceeded)
 def rate_limited(request: Request, exc: RateLimitExceeded):
     return JSONResponse(status_code=429, content={"detail": {"code": "rate_limited"}})
+
+
+@app.exception_handler(AIError)
+def ai_error(request: Request, exc: AIError):
+    return JSONResponse(status_code=exc.status, content={"detail": {"code": exc.code, **exc.detail}})
 
 
 @app.get("/", tags=["health"])

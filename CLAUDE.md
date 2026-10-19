@@ -6,7 +6,7 @@
 
 | Path | |
 |---|---|
-| `backend/` | FastAPI + SQLAlchemy 2 + Alembic. `app/routers/` (auth, me, items, outfits, misc), `app/ai.py` + `app/llm.py` (Groq), `app/config.py` (all settings, env-overridable), `app/storage.py` (db / s3), `migrations/`, `tests/` |
+| `backend/` | FastAPI + SQLAlchemy 2 + Alembic. `app/routers/` (auth, me, items, outfits, misc), `app/ai/` (gateway, routing, providers anthropic/groq/fake, prompts, schemas, features; models only in `routes.default.json`), `app/entitlements/` (plans, daily budget), `app/config.py` (all settings, env-overridable), `app/storage.py` (db / s3), `migrations/`, `scripts/`, `tests/` |
 | `app/` | Expo (React Native) app for iOS, Android, web; EN/TR. Screens in `src/app/` (Expo Router), data hooks in `src/lib/queries.ts` (TanStack Query). **Read `app/AGENTS.md` before touching the app.** |
 | `docs/` | design docs (`AI-00-foundation.md`) |
 | `ROADMAP.md` | phases and status |
@@ -16,7 +16,7 @@
 ```bash
 # backend (Python 3.13)
 cd backend && pip install -r requirements-dev.txt
-pytest -q                       # SQLite + TestClient; LLM calls are monkeypatched
+pytest -q                       # SQLite + TestClient; every AI route points at the fake provider
 TEST_DATABASE_URL=postgresql://… pytest -q   # same suite on Postgres (CI does both)
 alembic upgrade head && alembic check        # migrations match the models
 

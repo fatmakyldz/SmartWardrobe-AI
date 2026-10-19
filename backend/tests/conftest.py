@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 
@@ -9,6 +10,21 @@ else:
     _db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     os.environ["DATABASE_URL"] = f"sqlite:///{_db.name}"
 os.environ["GROQ_API_KEY"] = "test-key"
+os.environ["ANTHROPIC_API_KEY"] = ""
+# Every model in the chain is the fake provider: two candidates per feature, so fallback is testable.
+os.environ["AI_ROUTES"] = json.dumps({
+    "models": {
+        "vision-a": {"provider": "fake", "model": "fake-vision-a", "in_usd_per_mtok": 1.0, "out_usd_per_mtok": 5.0},
+        "vision-b": {"provider": "fake", "model": "fake-vision-b", "in_usd_per_mtok": 0.5, "out_usd_per_mtok": 1.0},
+        "text-a": {"provider": "fake", "model": "fake-text-a", "in_usd_per_mtok": 2.0, "out_usd_per_mtok": 10.0},
+        "text-b": {"provider": "fake", "model": "fake-text-b", "in_usd_per_mtok": 0.1, "out_usd_per_mtok": 0.5},
+    },
+    "routes": {
+        "tagging": {"standard": ["vision-a", "vision-b"], "premium": ["vision-a", "vision-b"]},
+        "suggest": {"standard": ["text-a", "text-b"], "premium": ["text-a", "text-b"]},
+    },
+    "attempts_per_candidate": 2,
+})
 os.environ["SECRET_KEY"] = "test-secret-key-that-is-long-enough-32b"
 os.environ["PUBLIC_BASE_URL"] = "http://testserver"
 
@@ -26,6 +42,19 @@ def fresh_db():
     Base.metadata.create_all(engine)
     limiter.reset()
     yield
+
+
+@pytest.fixture(autouse=True)
+def fake_ai(monkeypatch):
+    """The fake provider behind every route. Script answers with fake_ai.script(model, ...) or fake_ai.respond."""
+    from app.ai import gateway, routing
+    from app.ai.providers import FAKE
+
+    FAKE.reset()
+    gateway.IDEMPOTENCY.clear()
+    routing.HEALTH.reset()
+    monkeypatch.setattr(gateway, "sleep", lambda s: None)
+    return FAKE
 
 
 @pytest.fixture
