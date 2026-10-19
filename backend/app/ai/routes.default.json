@@ -1,0 +1,33 @@
+{
+  "_source": "Model ids and prices checked 2026-10-19: platform.claude.com/docs/en/about-claude/models/overview and /pricing; console.groq.com/docs/models. Prices are USD per million tokens. Haiku's rate applies to prompts up to 100K tokens.",
+  "models": {
+    "claude-small-vision": {
+      "provider": "anthropic", "model": "claude-haiku-5-5",
+      "in_usd_per_mtok": 0.10, "out_usd_per_mtok": 0.50,
+      "options": {"effort": "low", "thinking_headroom": 2048}
+    },
+    "claude-mid": {
+      "provider": "anthropic", "model": "claude-sonnet-5-5",
+      "in_usd_per_mtok": 2.00, "out_usd_per_mtok": 10.00,
+      "options": {"effort": "medium", "thinking_headroom": 4096}
+    },
+    "groq-vision": {
+      "provider": "groq", "model": "qwen/qwen3.8-27b",
+      "in_usd_per_mtok": 0.80, "out_usd_per_mtok": 4.00,
+      "daily_cap_tokens": 2000000
+    },
+    "groq-text": {
+      "provider": "groq", "model": "openai/gpt-oss-120b",
+      "in_usd_per_mtok": 0.15, "out_usd_per_mtok": 0.60,
+      "daily_cap_tokens": 2000000
+    }
+  },
+  "routes": {
+    "tagging": {"standard": ["claude-small-vision", "groq-vision"], "premium": ["claude-small-vision", "groq-vision"]},
+    "suggest": {"standard": ["claude-mid", "groq-text"], "premium": ["claude-mid", "groq-text"]},
+    "intent": {"standard": ["claude-small-vision", "groq-text"], "premium": ["claude-small-vision", "groq-text"]},
+    "capsule_explain": {"standard": ["claude-small-vision", "groq-text"], "premium": ["claude-mid", "groq-text"]}
+  },
+  "attempts_per_candidate": 2,
+  "timeouts_s": {"tagging": 30, "suggest": 45, "intent": 15, "capsule_explain": 30}
+}

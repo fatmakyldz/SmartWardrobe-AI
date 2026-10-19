@@ -2,6 +2,8 @@ import io
 
 from PIL import Image
 
+from app.ai.providers import FAKE
+
 
 def png_bytes(color=(200, 30, 60)) -> bytes:
     buf = io.BytesIO()
@@ -61,23 +63,25 @@ def test_demo_cannot_log_in_with_password(client):
 
 # ── items ───────────────────────────────────────────────────────────────
 
-def test_analyze_then_create_item(client, auth, monkeypatch):
+def test_analyze_then_create_item(client, auth, fake_ai):
+    from app.ai.providers import ImagePart
+
     seen = {}
 
-    def fake_chat(messages, model, **kw):
+    def fake_chat(call, model):
         seen["model"] = model
-        seen["has_image"] = messages[1]["content"][1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+        seen["has_image"] = any(isinstance(p, ImagePart) and p.data[:2] == b"\xff\xd8" for p in call.parts)
         return {
             "is_clothing": True, "category": "DRESS", "subcategory": "midi dress", "name": "Bordo elbise",
             "colors": ["burgundy", "neon-unicorn", "black"], "pattern": "solid",
             "warmth": 9, "formality": 4, "seasons": ["autumn", "monsoon"],
         }
 
-    monkeypatch.setattr("app.ai.chat_json", fake_chat)
+    fake_ai.respond = fake_chat
     r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, data={"lang": "tr"}, headers=auth)
     assert r.status_code == 200, r.text
     body = r.json()
-    assert seen == {"model": "qwen/qwen3.8-27b", "has_image": True}
+    assert seen == {"model": "fake-vision-a", "has_image": True}
     # model output is coerced into the fixed vocabularies
     assert body["tags"]["category"] == "dress"
     assert body["tags"]["colors"] == ["burgundy", "black"]
@@ -114,14 +118,21 @@ def test_rejects_non_image(client, auth):
 
 
 def test_ai_not_configured(client, auth, monkeypatch):
+    import json
+
+    from app.ai import routing
     from app.config import get_settings
 
+    # The real routes (Claude → Groq) with neither key set.
+    real = routing.parse_config(json.loads(routing.DEFAULT_ROUTES.read_text()))
+    monkeypatch.setattr(routing, "config", lambda: real)
     monkeypatch.setattr(get_settings(), "groq_api_key", "")
+    monkeypatch.setattr(get_settings(), "anthropic_api_key", "")
     r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=auth)
     assert r.status_code == 503 and r.json()["detail"]["code"] == "ai_not_configured"
 
 
-def test_analyze_runs_off_the_event_loop(client, auth, monkeypatch):
+def test_analyze_runs_off_the_event_loop(client, auth, monkeypatch, fake_ai):
     import asyncio
 
     import app.routers.items as items_router
@@ -140,12 +151,12 @@ def test_analyze_runs_off_the_event_loop(client, auth, monkeypatch):
         seen["normalize"] = on_loop()
         return real_normalize(raw, max_mb)
 
-    def spy_chat(messages, model, **kw):
+    def spy_chat(call, model):
         seen["llm"] = on_loop()
         return {"is_clothing": True, "category": "top"}
 
     monkeypatch.setattr(items_router, "normalize", spy_normalize)
-    monkeypatch.setattr("app.ai.chat_json", spy_chat)
+    fake_ai.respond = spy_chat
     r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=auth)
     assert r.status_code == 200, r.text
     # Pillow and the Groq call must run in the threadpool, not on the event loop.
@@ -161,28 +172,36 @@ def test_rejects_too_large_image(client, auth, monkeypatch):
     assert r.status_code == 413 and r.json()["detail"]["code"] == "image_too_large"
 
 
-def test_wardrobe_full_uses_max_items_setting(client, monkeypatch):
-    from app.config import get_settings
+def test_wardrobe_full_uses_plan_max_items(client, auth):
+    from datetime import datetime, timezone
 
+    from app.db import SessionLocal
+    from app.models import EntitlementGrant, Item, User
+
+    with SessionLocal() as db:
+        user = db.query(User).one()
+        uid = user.id
+        db.add_all([Item(user_id=uid, image_key=f"u/{uid.hex}/{n}.webp", category="top") for n in range(50)])
+        db.commit()
+    body = {"image_key": f"u/{uid.hex}/new.webp", "category": "top"}
+    r = client.post("/items", json=body, headers=auth)
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "wardrobe_full"  # free plan: 50
+
+    with SessionLocal() as db:
+        db.add(EntitlementGrant(user_id=uid, limits={"max_items": 60}, source="support", reason="test",
+                                created_by="test", starts_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
+        db.commit()
+    assert client.post("/items", json=body, headers=auth).status_code == 201
+
+
+def test_demo_account_is_full_and_cannot_tag(client):
     token = client.post("/auth/demo", json={}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
-    items = client.get("/items", headers=h).json()
-    key = items[0]["image_url"].split("/images/")[1]
-
-    monkeypatch.setattr(get_settings(), "max_items", len(items))
+    key = client.get("/items", headers=h).json()[0]["image_url"].split("/images/")[1]
     r = client.post("/items", json={"image_key": key, "category": "top"}, headers=h)
-    assert r.status_code == 400 and r.json()["detail"]["code"] == "wardrobe_full"
-
-    monkeypatch.setattr(get_settings(), "max_items", len(items) + 1)
-    assert client.post("/items", json={"image_key": key, "category": "top"}, headers=h).status_code == 201
-
-
-def test_max_items_default_and_env_override(monkeypatch):
-    from app.config import Settings
-
-    assert Settings().max_items == 300
-    monkeypatch.setenv("MAX_ITEMS", "50")
-    assert Settings().max_items == 50
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "wardrobe_full"  # demo plan: its 17 pieces
+    r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=h)
+    assert r.status_code == 403 and r.json()["detail"] == {"code": "feature_not_allowed", "feature": "tagging"}
 
 
 # ── outfits ─────────────────────────────────────────────────────────────
@@ -192,13 +211,13 @@ def test_suggest_needs_complete_wardrobe(client, auth):
     assert r.status_code == 400 and r.json()["detail"]["code"] == "wardrobe_incomplete"
 
 
-def test_suggest_validates_and_learns(client, fake_weather, monkeypatch):
+def test_suggest_validates_and_learns(client, fake_weather, fake_ai):
     token = client.post("/auth/demo", json={"locale": "en"}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
     prompts = []
 
-    def fake_chat(messages, model, **kw):
-        prompts.append(messages[1]["content"])
+    def fake_chat(call, model):
+        prompts.append(call.parts[0].text)
         # 0 white tee, 4 jeans, 12 sneakers, 11 leather jacket | 8 dress, 14 loafers
         return {
             "outfits": [
@@ -209,7 +228,7 @@ def test_suggest_validates_and_learns(client, fake_weather, monkeypatch):
             ]
         }
 
-    monkeypatch.setattr("app.ai.chat_json", fake_chat)
+    fake_ai.respond = fake_chat
     r = client.post("/outfits/suggest", json={"occasion": "casual", "lang": "en"}, headers=h)
     assert r.status_code == 200, r.text
     data = r.json()
@@ -231,7 +250,7 @@ def test_suggest_validates_and_learns(client, fake_weather, monkeypatch):
 
 
 def _demo_with_outfit(client, monkeypatch):
-    monkeypatch.setattr("app.ai.chat_json", lambda m, model, **kw: {"outfits": [{"title": "t", "items": [4, 0, 12], "reason": "r"}]})
+    FAKE.respond = (lambda call, model: {"outfits": [{"title": "t", "items": [4, 0, 12], "reason": "r"}]})
     token = client.post("/auth/demo", json={}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
     outfit = client.post("/outfits/suggest", json={}, headers=h).json()["outfits"][0]
@@ -301,7 +320,7 @@ def test_suggest_without_weather_still_works(client, monkeypatch):
         raise HTTPException(502, detail={"code": "weather_unavailable"})
 
     monkeypatch.setattr("app.routers.outfits.get_weather", boom)
-    monkeypatch.setattr("app.ai.chat_json", lambda m, model, **kw: {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]})
+    FAKE.respond = (lambda call, model: {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]})
     token = client.post("/auth/demo", json={}).json()["token"]
     r = client.post("/outfits/suggest", json={}, headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200 and r.json()["weather"] is None
@@ -350,7 +369,7 @@ def test_delete_account_removes_everything(client, monkeypatch):
     from app.db import SessionLocal
     from app.models import FeedbackEvent, Item, Outfit, OutfitItem, StoredImage, User
 
-    monkeypatch.setattr("app.ai.chat_json", lambda m, model, **kw: {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]})
+    FAKE.respond = (lambda call, model: {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]})
     token = client.post("/auth/demo", json={}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
     outfit = client.post("/outfits/suggest", json={}, headers=h).json()["outfits"][0]
@@ -366,7 +385,7 @@ def test_rate_limit_on_suggest(client, fake_weather, monkeypatch):
     from app.config import get_settings
 
     monkeypatch.setattr(get_settings(), "suggest_limit", "2/hour")
-    monkeypatch.setattr("app.ai.chat_json", lambda m, model, **kw: {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]})
+    FAKE.respond = (lambda call, model: {"outfits": [{"title": "t", "items": [0, 4], "reason": "r"}]})
     token = client.post("/auth/demo", json={}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
     codes = [client.post("/outfits/suggest", json={}, headers=h).status_code for _ in range(3)]

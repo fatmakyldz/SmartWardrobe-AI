@@ -1,12 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import ai
+from ..ai.features import suggest as suggest_feature
 from ..config import get_settings
 from ..db import get_db
+from ..entitlements import UserBudget, entitlements, require_feature
 from ..models import FeedbackEvent, Item, Outfit, OutfitItem, User
 from ..ratelimit import limiter
 from ..schemas import FeedbackIn, OutfitOut, SuggestIn, SuggestOut, WeatherOut
@@ -23,9 +24,17 @@ def _items_by_id(user: User) -> dict[str, Item]:
 
 @router.post("/suggest", response_model=SuggestOut)
 @limiter.limit(lambda: get_settings().suggest_limit)
-def suggest(request: Request, body: SuggestIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def suggest(
+    request: Request,
+    body: SuggestIn,
+    idempotency_key: str | None = Header(default=None, max_length=100),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    ent = entitlements(user, db)
+    require_feature(ent, "suggest")
     items = list(user.items)
-    if not ai.wardrobe_ready(items):
+    if not suggest_feature.wardrobe_ready(items):
         raise HTTPException(400, detail={"code": "wardrobe_incomplete"})
 
     lat = body.lat if body.lat is not None else user.lat
@@ -46,7 +55,10 @@ def suggest(request: Request, body: SuggestIn, user: User = Depends(current_user
         )
     )
 
-    suggestions = ai.suggest(items, weather, body.occasion, body.note.strip(), body.lang, history)
+    suggestions, ai_resp = suggest_feature.suggest(
+        items, weather, body.occasion, body.note.strip(), body.lang, history,
+        subject_id=user.id, tier=ent.model_tier, budget=UserBudget(user, ent), idempotency_key=idempotency_key,
+    )
 
     saved = []
     for sug in suggestions:
@@ -59,6 +71,8 @@ def suggest(request: Request, body: SuggestIn, user: User = Depends(current_user
             title=sug["title"],
             reason=sug["reason"],
             lang=body.lang,
+            prompt_version=ai_resp.prompt_version,
+            ai_request_id=ai_resp.request_id,
             outfit_items=[OutfitItem(item=i, position=n, slot=i.category) for n, i in enumerate(sug["items"])],
         )
         db.add(outfit)

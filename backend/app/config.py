@@ -13,11 +13,14 @@ class Settings(BaseSettings):
     secret_key: str = "dev-only-change-me"
     token_days: int = 30
 
-    # Groq (OpenAI-compatible API)
+    # AI providers. Which models run for which feature is in app/ai/routes.default.json.
+    anthropic_api_key: str = ""
     groq_api_key: str = ""
     groq_base_url: str = "https://api.groq.com/openai/v1"
-    groq_text_model: str = "openai/gpt-oss-120b"
-    groq_vision_model: str = "qwen/qwen3.8-27b"
+    # Optional override of the routes config: inline JSON or a path to a JSON file.
+    ai_routes: str = ""
+    # Print full prompts to stderr. Local only: refused at startup unless the database is SQLite.
+    ai_debug_log: bool = False
 
     # Image storage: "db" keeps images in Postgres (zero setup);
     # "s3" uses any S3-compatible bucket (Cloudflare R2, Supabase Storage…).
@@ -47,7 +50,6 @@ class Settings(BaseSettings):
 
     demo_ttl_hours: int = 24
     max_upload_mb: int = 10
-    max_items: int = 300  # per user; POST /items answers wardrobe_full beyond this
 
     @property
     def cors_list(self) -> list[str]:
