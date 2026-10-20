@@ -65,7 +65,7 @@ def upload(client, headers) -> str:
 
 def register(client, email="other@example.com") -> dict:
     r = client.post("/auth/register", json={"email": email, "password": "supersecret1"})
-    return {"Authorization": f"Bearer {r.json()['token']}"}
+    return {"Authorization": f"Bearer {r.json()['access']}"}
 
 
 def wi(key: str) -> WardrobeImage | None:
@@ -190,8 +190,8 @@ def test_reconcile_both_ways(client, auth, s3, fake_ai):
 # ── shared demo pictures ──────────────────────────────────────────────────
 
 def test_demo_pictures_are_uploaded_once_and_never_deleted(client, s3):
-    a = {"Authorization": f"Bearer {client.post('/auth/demo', json={}).json()['token']}"}
-    b = {"Authorization": f"Bearer {client.post('/auth/demo', json={}).json()['token']}"}
+    a = {"Authorization": f"Bearer {client.post('/auth/demo', json={}).json()['access']}"}
+    b = {"Authorization": f"Bearer {client.post('/auth/demo', json={}).json()['access']}"}
     assert len(bucket_keys(s3)) == 17 and all(k.startswith("demo/") for k in bucket_keys(s3))
     with SessionLocal() as db:
         rows = db.scalars(select(WardrobeImage)).all()
@@ -235,7 +235,7 @@ def test_unauthorized_image_access(client, auth, fake_ai):
     assert client.get(f"/images/{key}", headers=auth).status_code == 200
     other = register(client)
     assert client.get(f"/images/{key}", headers=other).status_code == 404  # not "forbidden": no hint it exists
-    demo = {"Authorization": f"Bearer {client.post('/auth/demo', json={}).json()['token']}"}
+    demo = {"Authorization": f"Bearer {client.post('/auth/demo', json={}).json()['access']}"}
     assert client.get("/images/demo/white-tee.webp", headers=demo).status_code == 200
     assert client.get("/images/demo/white-tee.webp", headers=other).status_code == 404
     assert client.get(f"/images/{key}", headers=demo).status_code == 404

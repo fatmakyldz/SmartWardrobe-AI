@@ -31,7 +31,11 @@ export type User = {
   lat: number | null;
   lon: number | null;
   is_demo: boolean;
+  email_verified_at: string | null;
 };
+
+// access: 15-minute JWT. refresh: 30 days, single use; null on the web, where it is an httpOnly cookie.
+export type Session = { access: string; refresh: string | null; user: User };
 
 export type Tags = {
   name: string;
@@ -77,14 +81,24 @@ export class ApiError extends Error {
   }
 }
 
-let token: string | null = null;
-let onUnauthorized: (() => void) | null = null;
+const WEB = Platform.OS === 'web';
 
-export function setToken(t: string | null) {
-  token = t;
+// The access token lives only in memory. The refresh token is kept by auth.tsx (SecureStore) on
+// devices; on the web the browser keeps it as a cookie the page can't read.
+let token: string | null = null;
+let refreshToken: string | null = null;
+let onUnauthorized: (() => void) | null = null;
+let onRefreshed: ((s: Session) => void) | null = null;
+
+export function setSession(s: { access: string | null; refresh: string | null }) {
+  token = s.access;
+  refreshToken = s.refresh;
 }
 export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn;
+}
+export function setRefreshedHandler(fn: (s: Session) => void) {
+  onRefreshed = fn;
 }
 
 // expo-image source for a photo. The cache is keyed on image_key, so a new link for the same photo is
@@ -96,14 +110,17 @@ export function imageSource(url: string, key?: string): { uri: string; cacheKey?
   return { uri, cacheKey: key, headers: fromApi && token ? { Authorization: `Bearer ${token}` } : undefined };
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function send<T>(path: string, init: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (init.body && !(init.body instanceof FormData)) headers['Content-Type'] = 'application/json';
+  const auth = path.startsWith('/auth/');
+  // Web sign-in/refresh/logout: the refresh token travels as an httpOnly cookie (same site as the API).
+  if (WEB && auth) headers['X-Auth-Cookie'] = '1';
 
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, { ...init, headers });
+    res = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: WEB && auth ? 'include' : 'same-origin' });
   } catch {
     throw new ApiError('network', 0);
   }
@@ -111,12 +128,61 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => null);
   if (!res.ok) {
-    if (res.status === 401 && token) onUnauthorized?.();
     const code =
       typeof body?.detail?.code === 'string' ? body.detail.code : res.status === 422 ? 'validation' : 'unknown';
     throw new ApiError(code, res.status);
   }
   return body as T;
+}
+
+// One refresh at a time: parallel 401s wait for the same call (a spent refresh token used twice
+// would sign every device out).
+let refreshing: Promise<Session | null> | null = null;
+
+export function refreshSession(): Promise<Session | null> {
+  if (!WEB && !refreshToken) return Promise.resolve(null);
+  refreshing ??= (async () => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const s = await send<Session>('/auth/refresh', json('POST', WEB ? undefined : { refresh: refreshToken }));
+        setSession(s);
+        onRefreshed?.(s);
+        return s;
+      } catch (e) {
+        // Another tab rotated the cookie a moment ago: the browser now holds the new one.
+        if (WEB && e instanceof ApiError && e.code === 'refresh_superseded' && attempt === 0) {
+          await new Promise((r) => setTimeout(r, 400));
+          continue;
+        }
+        if (e instanceof ApiError && e.status === 401) return null;
+        throw e;
+      }
+    }
+    return null;
+  })().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+// 401 → refresh once → retry; still 401 (or no session to refresh) → sign out.
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  try {
+    return await send<T>(path, init);
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 401 || !token || path.startsWith('/auth/')) throw e;
+    const s = await refreshSession().catch(() => null);
+    if (!s) {
+      onUnauthorized?.();
+      throw e;
+    }
+    try {
+      return await send<T>(path, init);
+    } catch (again) {
+      if (again instanceof ApiError && again.status === 401) onUnauthorized?.();
+      throw again;
+    }
+  }
 }
 
 const json = (method: string, body?: unknown): RequestInit => ({ method, body: body ? JSON.stringify(body) : undefined });
@@ -125,9 +191,14 @@ export type PickedImage = { uri: string; mimeType?: string | null; fileName?: st
 
 export const api = {
   register: (b: { email: string; password: string; name: string; locale: string }) =>
-    request<{ token: string; user: User }>('/auth/register', json('POST', b)),
-  login: (b: { email: string; password: string }) => request<{ token: string; user: User }>('/auth/login', json('POST', b)),
-  demo: (locale: string) => request<{ token: string; user: User }>('/auth/demo', json('POST', { locale })),
+    request<Session>('/auth/register', json('POST', b)),
+  login: (b: { email: string; password: string }) => request<Session>('/auth/login', json('POST', b)),
+  demo: (locale: string) => request<Session>('/auth/demo', json('POST', { locale })),
+  logout: () => request<void>('/auth/logout', json('POST', WEB ? undefined : { refresh: refreshToken })),
+  verifyEmail: (t: string) => request<User>('/auth/verify', json('POST', { token: t })),
+  resendVerification: () => request<void>('/auth/resend-verification', { method: 'POST' }),
+  forgot: (email: string) => request<{ status: string }>('/auth/forgot', json('POST', { email })),
+  resetPassword: (b: { token: string; password: string }) => request<void>('/auth/reset', json('POST', b)),
 
   me: () => request<User>('/me'),
   updateMe: (b: Partial<Pick<User, 'name' | 'locale' | 'city' | 'lat' | 'lon'>>) => request<User>('/me', json('PATCH', b)),
@@ -147,7 +218,7 @@ export const api = {
       } as unknown as Blob);
     }
     form.append('lang', lang);
-    return request<{ image_key: string; image_url: string; is_clothing: boolean; tags: Tags }>('/items/analyze', {
+    return request<{ image_key: string; image_url: string; is_clothing: boolean; tags: Tags; ai_skipped: string | null }>('/items/analyze', {
       method: 'POST',
       body: form,
     });

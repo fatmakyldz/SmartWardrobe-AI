@@ -10,9 +10,21 @@ class Settings(BaseSettings):
     # Postgres in production (Neon); SQLite works for local runs and tests.
     database_url: str = "sqlite:///./smartwardrobe.db"
 
-    # Signs login tokens. MUST be set to a long random value in production.
+    # Signs access tokens. MUST be set to a long random value in production.
     secret_key: str = "dev-only-change-me"
-    token_days: int = 30
+    access_token_minutes: int = 15
+    refresh_token_days: int = 30
+    # Web: the refresh token lives in an httpOnly cookie on the API host (api.fomertech.com, same site
+    # as the web app). Off only for plain-http local runs.
+    refresh_cookie_secure: bool = True
+
+    # Transactional email (verification, password reset) through Resend. Without a key the fake
+    # backend logs the message instead (local runs, tests).
+    resend_api_key: str = ""
+    email_from: str = "SmartWardrobe <noreply@fomertech.com>"
+    # Where links in emails point: the web app, which also hands off to the mobile app.
+    app_url: str = "https://wardrobe.fomertech.com"
+    app_scheme: str = "smartwardrobe"
 
     # AI providers. Which models run for which feature is in app/ai/routes.default.json.
     anthropic_api_key: str = ""
@@ -37,7 +49,8 @@ class Settings(BaseSettings):
     # Public URL of this API, used to build image links in db storage mode.
     public_base_url: str = ""
 
-    # Comma-separated origins for the web app. Empty = allow all (local dev).
+    # Comma-separated origins for the web app (credentials allowed). Empty = any origin, which is only
+    # accepted with a local SQLite database; with Postgres the API refuses to start.
     cors_origins: str = ""
 
     # Proxies whose X-Forwarded-For / X-Forwarded-Proto we believe (IPs or CIDRs, comma-separated).
@@ -52,6 +65,12 @@ class Settings(BaseSettings):
     analyze_limit: str = "30/hour"
     suggest_limit: str = "20/hour"
     demo_limit: str = "10/hour"
+    # Auth endpoints (per IP; resend-verification per user).
+    refresh_limit: str = "60/hour"
+    forgot_limit: str = "5/hour"
+    reset_limit: str = "10/hour"
+    verify_limit: str = "20/hour"
+    resend_verification_limit: str = "5/hour"
 
     demo_ttl_hours: int = 24
     max_upload_mb: int = 10

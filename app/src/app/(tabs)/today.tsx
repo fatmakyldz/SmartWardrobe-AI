@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, useWindowDimensions, View } from 'react-native';
@@ -50,9 +50,23 @@ export default function Today() {
     feedback.mutate({ id: o.id, rating: o.rating === r ? 0 : r });
   }
 
+  const [resent, setResent] = useState(false);
+  const resend = useMutation({ mutationFn: api.resendVerification, onSuccess: () => setResent(true) });
+  const unverified = !!user && !user.is_demo && !user.email_verified_at;
+
   const w = weather.data;
   return (
     <Screen>
+      {unverified ? (
+        <View style={{ marginTop: space.lg, gap: space.sm }}>
+          <Notice>{resent ? t.today.resent : t.today.verifyBanner(user.email)}</Notice>
+          {resend.isError ? <Notice tone="error">{errorText(resend.error)}</Notice> : null}
+          {!resent ? (
+            <Button label={t.today.resend} kind="secondary" loading={resend.isPending} onPress={() => resend.mutate()} />
+          ) : null}
+        </View>
+      ) : null}
+
       {/* The day, as a headline */}
       <View style={{ marginTop: space.xl, marginBottom: space.xl }}>
         {hasLocation && w?.temp != null ? (

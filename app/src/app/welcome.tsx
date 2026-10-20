@@ -31,8 +31,7 @@ export default function Welcome() {
     setBusy(true);
     setError(null);
     try {
-      const { token, user } = await api.demo(lang);
-      await signIn(token, user);
+      await signIn(await api.demo(lang));
     } catch (e) {
       setError(errorText(e));
     } finally {
