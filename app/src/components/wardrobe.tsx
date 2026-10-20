@@ -2,8 +2,9 @@ import { Image } from 'expo-image';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Category, imageUrl, Item, Outfit } from '@/lib/api';
+import { Category, imageSource, Item, Outfit } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { useFreshItem } from '@/lib/queries';
 import { radius, space, usePalette } from '@/lib/theme';
 
 import { Button, T, tap } from './ui';
@@ -22,7 +23,7 @@ export function ItemTile({ item, onPress, size }: { item: Item; onPress?: () => 
       style={({ pressed }) => [{ width: size, opacity: pressed ? 0.85 : 1 }]}
     >
       <Image
-        source={{ uri: imageUrl(item.image_url) }}
+        source={imageSource(item.image_url, item.image_key)}
         style={{ width: size, height: size, borderRadius: radius.md, backgroundColor: p.surfaceAlt }}
         contentFit="cover"
         transition={150}
@@ -125,6 +126,8 @@ function Piece({
 }) {
   const p = usePalette();
   const { t } = useI18n();
+  // Outfits can sit in the cache longer than their image links live; the wardrobe list has fresher ones.
+  const fresh = useFreshItem(item);
   return (
     <Pressable
       accessibilityRole="button"
@@ -135,7 +138,7 @@ function Piece({
         { width: size, height: size, transform: [{ rotate: `${tilt}deg` }], backgroundColor: p.surface, shadowColor: '#2A1B26' },
       ]}
     >
-      <Image source={{ uri: imageUrl(item.image_url) }} style={{ flex: 1, borderRadius: radius.sm }} contentFit="cover" />
+      <Image source={imageSource(fresh.image_url, fresh.image_key)} style={{ flex: 1, borderRadius: radius.sm }} contentFit="cover" />
     </Pressable>
   );
 }

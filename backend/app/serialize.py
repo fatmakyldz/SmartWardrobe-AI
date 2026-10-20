@@ -14,6 +14,7 @@ def item_out(item: Item) -> ItemOut:
         warmth=item.warmth,
         formality=item.formality,
         seasons=item.seasons or [],
+        image_key=item.image_key,
         image_url=get_storage().url(item.image_key),
         created_at=item.created_at,
     )

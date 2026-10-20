@@ -7,7 +7,7 @@ import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
 import { CloseIcon } from '@/components/icons';
 import { TagEditor } from '@/components/TagEditor';
 import { Button, Notice, Screen, T } from '@/components/ui';
-import { api, imageUrl, PickedImage, Tags } from '@/lib/api';
+import { api, imageSource, PickedImage, Tags } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
 import { useCreateItem } from '@/lib/queries';
@@ -62,7 +62,7 @@ export default function NewItem() {
     }
   }
 
-  const shown = draft ? imageUrl(draft.url) : preview;
+  const shown = draft ? imageSource(draft.url, draft.key) : preview ? { uri: preview } : null;
 
   return (
     <Screen edges={['top', 'bottom']}>
@@ -78,7 +78,7 @@ export default function NewItem() {
       {shown ? (
         <View style={{ marginTop: space.md }}>
           <Image
-            source={{ uri: shown }}
+            source={shown}
             style={{ width: '100%', aspectRatio: 1, borderRadius: radius.lg, backgroundColor: p.surfaceAlt }}
             contentFit="cover"
           />

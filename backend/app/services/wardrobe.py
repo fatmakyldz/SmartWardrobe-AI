@@ -5,20 +5,10 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..images import new_key, normalize
 from ..models import Item, User
-from ..storage import get_storage
 from ..vocab import COLORS, PATTERNS, SEASONS, keep_known, one_of
+from . import images
 from .errors import bad_request, not_found
-
-
-def store_upload(db: Session, user: User, raw: bytes, max_mb: int) -> tuple[str, bytes]:
-    """Validate and store a photo; returns (image_key, small JPEG for the vision model)."""
-    stored, small = normalize(raw, max_mb)
-    key = new_key(user.id)
-    get_storage().put(db, key, stored, "image/webp")
-    db.commit()
-    return key, small
 
 
 def clean(values: dict) -> dict:
@@ -39,13 +29,14 @@ def list_items(db: Session, user: User, category: str | None = None) -> list[Ite
 
 
 def create_item(db: Session, user: User, values: dict, max_items: int) -> Item:
-    # The key must be one this user uploaded via /items/analyze.
-    if not values["image_key"].startswith(f"u/{user.id.hex}/"):
-        raise bad_request("invalid_image")
     if len(user.items) >= max_items:
         raise bad_request("wardrobe_full")
+    # The key must be one this user uploaded via /items/analyze and not on another item yet.
+    img = images.claim_upload(db, user, values["image_key"])
     item = Item(user_id=user.id, **clean(values))
     db.add(item)
+    db.flush()
+    images.attach(img, item)
     db.commit()
     return item
 
@@ -68,6 +59,7 @@ def update_item(db: Session, user: User, item_id: uuid.UUID, values: dict) -> It
 
 def delete_item(db: Session, user: User, item_id: uuid.UUID) -> None:
     item = own_item(db, user, item_id)
-    get_storage().delete(db, [item.image_key])
-    db.delete(item)  # outfit_items rows go with it (ON DELETE CASCADE)
+    key = item.image_key
+    db.delete(item)  # outfit_items rows go with it (ON DELETE CASCADE); wardrobe_images.item_id → NULL
     db.commit()
+    images.release(db, key)  # the object after the row, tolerant of bucket errors (§8)

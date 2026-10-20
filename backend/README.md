@@ -58,6 +58,35 @@ It adds fields to `users` / `items` / `outfits`, ten new tables, and copies `out
 
 `wardrobe_images.user_id` is NULL only for shared demo images. Any query that lists images must filter with `WardrobeImage.visible_to(user)`, which includes NULL-owner rows for demo accounts only.
 
+## Photo storage
+
+`STORAGE_BACKEND=db` keeps photos in the `images` table (local runs, tests). Production uses `s3`: the private R2 bucket `smartwardrobe-media`, nothing public. Every response carries a fresh presigned GET link (`image_url`, 15 min, `IMAGE_URL_SECONDS`) plus the stable `image_key` the app caches on; objects are stored with `Cache-Control: private, max-age=900`.
+
+- Each photo has a `wardrobe_images` row: written by `/items/analyze` with `attached_at` NULL, attached (`item_id`, `attached_at`) by `POST /items` — which accepts only a key this user uploaded and that is not on an item yet. Deleting an item deletes the row first and the object after; if the bucket refuses, the row is kept as an orphan (`attached_at` NULL) for the cleanup.
+- Demo accounts share 17 pictures under `demo/{file}.webp` (`user_id` NULL), uploaded once on the first `/auth/demo`; they are never deleted. `services.images.copy_shared_image` gives an item its own copy (demo claim, AI-07).
+- Account deletion: rows in one transaction, then the `u/{user}/` prefix in the bucket.
+- `GET /images/{key}` exists only in db mode, for the signed-in owner (shared demo pictures: demo accounts); 404 otherwise, and always 404 in s3 mode.
+- `python scripts/cleanup_orphans.py [--dry-run]` (weekly): orphan rows older than 24 h → object + row deleted; in s3 mode also bucket ↔ table reconciliation (objects with no row and no item, older than 24 h, are deleted; rows whose object is missing are listed).
+
+### Switching production to the bucket (`STORAGE_BACKEND=s3`)
+
+Run from a checkout of `main` with a local `backend/.env` holding `DATABASE_URL` (Neon) and `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (the scripts are not deployed to the Space):
+
+1. Neon branch (snapshot) to roll back to.
+2. `python scripts/migrate_images_to_r2.py --dry-run` — counts: `images`, `uploaded`, `rows_written`, `already_done`, `unattached`, `no_owner`.
+3. `python scripts/migrate_images_to_r2.py` — idempotent and paged; re-run if it stops.
+4. `python scripts/migrate_images_to_r2.py --verify` — must print `OK` (it also checks that every row's object is in the bucket). The table side in SQL, for Neon's console — both must be 0 (`images_without_row` may only count blobs of users who no longer exist, which the script reports as `no_owner`):
+   ```sql
+   SELECT
+     (SELECT count(*) FROM items i LEFT JOIN wardrobe_images w ON w.key = i.image_key WHERE w.key IS NULL) AS items_without_row,
+     (SELECT count(*) FROM images b LEFT JOIN wardrobe_images w ON w.key = b.key WHERE w.key IS NULL)      AS images_without_row;
+   ```
+5. Space variable `STORAGE_BACKEND=s3` → the Space restarts.
+6. Smoke: open the wardrobe (images load from `…r2.cloudflarestorage.com` links), add a photo, delete it, try the demo.
+7. Run step 3 once more right after the switch: uploads made between step 3 and step 5 went to the table.
+
+Rollback: set `STORAGE_BACKEND=db` again — the `images` table is untouched until `0004_cleanup` (in `migrations/deferred/`, applied in AI-09 at the earliest a week later).
+
 ## Endpoints
 
 | Method | Path | |
@@ -77,7 +106,7 @@ It adds fields to `users` / `items` / `outfits`, ten new tables, and copies `out
 | POST | `/outfits/{id}/feedback` | `{rating: -1 \| 0 \| 1}` — used in future suggestions |
 | GET | `/meta/vocab` | categories, colours, patterns, seasons, occasions, styles, palettes, priorities (no auth) |
 | GET | `/weather`, `/cities` | Open-Meteo weather and city search |
-| GET | `/images/{key}` | photos (database storage mode) |
+| GET | `/images/{key}` | photos in database storage mode, owner only (closed in s3 mode: `image_url` is a presigned link) |
 
 Errors use `{"detail": {"code": "..."}}` so the app can show translated messages.
 

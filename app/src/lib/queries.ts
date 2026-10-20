@@ -14,12 +14,21 @@ function invalidateOutfitLists(qc: QueryClient) {
   return qc.invalidateQueries({ queryKey: ['outfits'], predicate: (q) => q.queryKey[1] !== 'latest' });
 }
 
+// Image links in responses live 15 minutes; refetching after 10 keeps them valid (§14 C4).
+const IMAGE_LINK_STALE = 10 * 60 * 1000;
+
 export function useItems() {
-  return useQuery({ queryKey: keys.items, queryFn: api.items });
+  return useQuery({ queryKey: keys.items, queryFn: api.items, staleTime: IMAGE_LINK_STALE });
+}
+
+// The same item from the wardrobe list, whose image link is the freshest one we have.
+export function useFreshItem(item: Item): Item {
+  const { data } = useItems();
+  return data?.find((i) => i.id === item.id) ?? item;
 }
 
 export function useOutfits(liked: boolean) {
-  return useQuery({ queryKey: keys.outfits(liked), queryFn: () => api.outfits(liked) });
+  return useQuery({ queryKey: keys.outfits(liked), queryFn: () => api.outfits(liked), staleTime: IMAGE_LINK_STALE });
 }
 
 export function useLatestOutfits() {

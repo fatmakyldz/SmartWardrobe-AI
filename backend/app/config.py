@@ -23,15 +23,16 @@ class Settings(BaseSettings):
     # Print full prompts to stderr. Local only: refused at startup unless the database is SQLite.
     ai_debug_log: bool = False
 
-    # Image storage: "db" keeps images in Postgres (zero setup);
-    # "s3" uses any S3-compatible bucket (Cloudflare R2, Supabase Storage…).
+    # Image storage: "db" keeps images in Postgres (local runs and tests);
+    # "s3" is a private S3-compatible bucket (Cloudflare R2) — production.
     storage_backend: str = "db"
     s3_endpoint_url: str = ""
     s3_bucket: str = ""
     s3_access_key_id: str = ""
     s3_secret_access_key: str = ""
-    s3_public_base_url: str = ""  # e.g. https://images.fomertech.com
     s3_region: str = "auto"
+    # Lifetime of the presigned image links the API hands out (and their Cache-Control max-age).
+    image_url_seconds: int = 900
 
     # Public URL of this API, used to build image links in db storage mode.
     public_base_url: str = ""

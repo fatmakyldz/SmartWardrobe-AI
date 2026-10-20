@@ -6,7 +6,7 @@ import { Alert, Platform, Pressable, View } from 'react-native';
 import { CloseIcon } from '@/components/icons';
 import { TagEditor } from '@/components/TagEditor';
 import { Button, Notice, Screen, T } from '@/components/ui';
-import { imageUrl, Item, Tags } from '@/lib/api';
+import { imageSource, Item, Tags } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
 import { useDeleteItem, useItems, useUpdateItem } from '@/lib/queries';
@@ -43,7 +43,7 @@ export default function ItemDetail() {
 }
 
 function initialTags(item: Item): Tags {
-  const { id: _id, image_url: _u, created_at: _c, ...rest } = item;
+  const { id: _id, image_key: _k, image_url: _u, created_at: _c, ...rest } = item;
   return rest;
 }
 
@@ -89,7 +89,7 @@ function Editor({ item }: { item: Item }) {
   return (
     <View style={{ gap: space.xl }}>
       <Image
-        source={{ uri: imageUrl(item.image_url) }}
+        source={imageSource(item.image_url, item.image_key)}
         style={{ width: '100%', aspectRatio: 1, borderRadius: radius.lg, backgroundColor: p.surfaceAlt }}
         contentFit="cover"
       />

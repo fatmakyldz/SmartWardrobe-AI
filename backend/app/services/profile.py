@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..models import FeedbackEvent, Item, Outfit, User
 from ..security import hash_password
-from ..storage import get_storage
+from . import images
 
 SUMMARY_EVERY_EVENTS = 10
 SUMMARY_MAX_AGE = timedelta(days=7)
@@ -50,10 +50,12 @@ def update_profile(db: Session, user: User, values: dict) -> User:
 
 
 def delete_account(db: Session, user: User) -> None:
-    """Account, wardrobe, outfits, feedback and photos. ai_requests keep only the pseudonymous id."""
-    get_storage().delete_prefix(db, f"u/{user.id.hex}/")
+    """Account, wardrobe, outfits, feedback and photos. ai_requests keep only the pseudonymous id.
+    One transaction for the rows (wardrobe_images go by cascade), then the photo objects (§9)."""
+    user_id = user.id
     db.delete(user)
     db.commit()
+    images.delete_user_objects(db, user_id)
 
 
 # ── explicit style preferences ────────────────────────────────────────────

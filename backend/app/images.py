@@ -48,3 +48,15 @@ def normalize(raw: bytes, max_mb: int) -> tuple[bytes, bytes]:
 def new_key(user_id: uuid.UUID, ext: str = "webp") -> str:
     return f"u/{user_id.hex}/{uuid.uuid4().hex}.{ext}"
 
+
+
+def dimensions(data: bytes) -> tuple[int, int]:
+    """Width and height from the header only (no full decode)."""
+    with Image.open(io.BytesIO(data)) as img:
+        return img.size
+
+
+def owner_hex(key: str) -> str | None:
+    """The user id (hex) a `u/{user_hex}/…` key belongs to; None for shared or unknown keys."""
+    parts = key.split("/")
+    return parts[1] if len(parts) == 3 and parts[0] == "u" and len(parts[1]) == 32 else None
