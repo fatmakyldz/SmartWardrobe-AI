@@ -161,7 +161,9 @@ def test_cors_allows_the_web_app_with_credentials_and_refuses_others(client):
     assert "access-control-allow-origin" not in simple.headers
 
 
-def test_cors_origins_are_required_outside_local_sqlite(monkeypatch):
+@pytest.mark.parametrize("origins", ["", "*", "https://wardrobe.fomertech.com,*"])
+def test_cors_origins_are_required_outside_local_sqlite(monkeypatch, origins):
+    # With credentials allowed, "*" makes Starlette echo any Origin back, so it is refused like empty.
     import importlib
 
     import app.main as main
@@ -169,7 +171,7 @@ def test_cors_origins_are_required_outside_local_sqlite(monkeypatch):
 
     s = get_settings()
     monkeypatch.setattr(s, "database_url", "postgresql://u:p@db/x")
-    monkeypatch.setattr(s, "cors_origins", "")
+    monkeypatch.setattr(s, "cors_origins", origins)
     with pytest.raises(RuntimeError, match="CORS_ORIGINS"):
         importlib.reload(main)
     monkeypatch.undo()

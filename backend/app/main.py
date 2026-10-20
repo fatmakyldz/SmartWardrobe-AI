@@ -17,8 +17,9 @@ settings = get_settings()
 
 if not settings.database_url.startswith("sqlite") and settings.secret_key == "dev-only-change-me":
     raise RuntimeError("Set SECRET_KEY to a long random value before running against a real database.")
-if not settings.database_url.startswith("sqlite") and not settings.cors_list:
-    raise RuntimeError("Set CORS_ORIGINS (e.g. https://wardrobe.fomertech.com): credentials are allowed, so any-origin is refused.")
+if not settings.database_url.startswith("sqlite") and (not settings.cors_list or "*" in settings.cors_list):
+    raise RuntimeError("Set CORS_ORIGINS to exact origins (e.g. https://wardrobe.fomertech.com): credentials are allowed, "
+                       "so any-origin (empty or *) is refused.")
 if not settings.database_url.startswith("sqlite") and settings.ai_debug_log:
     raise RuntimeError("AI_DEBUG_LOG prints full prompts; it is only allowed with a local SQLite database.")
 
