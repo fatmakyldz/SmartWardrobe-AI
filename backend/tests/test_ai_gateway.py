@@ -250,7 +250,7 @@ def test_default_routes_name_no_model_in_code():
 # ── through the API ─────────────────────────────────────────────────────
 
 def _demo(client):
-    token = client.post("/auth/demo", json={}).json()["token"]
+    token = client.post("/auth/demo", json={}).json()["access"]
     return {"Authorization": f"Bearer {token}"}
 
 

@@ -42,6 +42,17 @@ def create_user(db: Session, email: str, password: str, name: str, locale: str) 
     return user
 
 
+def mark_verified(user: User, now: datetime | None = None) -> None:
+    """The caller commits (with the spent token)."""
+    if user.email_verified_at is None:
+        user.email_verified_at = now or datetime.now(timezone.utc)
+
+
+def set_password(user: User, password: str) -> None:
+    """The caller commits, together with signing every session out."""
+    user.password_hash = hash_password(password)
+
+
 def update_profile(db: Session, user: User, values: dict) -> User:
     for field, value in values.items():
         setattr(user, field, value.strip() if isinstance(value, str) else value)

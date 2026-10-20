@@ -8,6 +8,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from ..models import AIRequest as AIRequestRow
@@ -112,3 +113,8 @@ class Telemetry:
             return False
         finally:
             db.close()
+
+
+def forget_subject(db: Session, subject_id: uuid.UUID) -> None:
+    """Account deletion: this subject's rows become anonymous aggregates (§9). The caller commits."""
+    db.execute(update(AIRequestRow).where(AIRequestRow.subject_id == subject_id).values(subject_id=None))

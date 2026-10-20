@@ -5,11 +5,11 @@
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://ftmakyldz-smartwardrobe-api.hf.space" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://api.fomertech.com" }
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://ftmakyldz-smartwardrobe-api.hf.space" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://api.fomertech.com" }
     }
   },
   "submit": { "production": {} }

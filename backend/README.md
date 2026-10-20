@@ -58,6 +58,12 @@ It adds fields to `users` / `items` / `outfits`, ten new tables, and copies `out
 
 `wardrobe_images.user_id` is NULL only for shared demo images. Any query that lists images must filter with `WardrobeImage.visible_to(user)`, which includes NULL-owner rows for demo accounts only.
 
+## Sign-in sessions and email
+
+Access tokens are 15-minute JWTs carrying `tv` = `users.token_version`; a token whose `tv` is stale gets 401, so bumping the version (logout-all, password reset) signs every device out at once. Refresh tokens are 30 days, single use and stored only as sha256 in `refresh_tokens`; each refresh returns a new one in the same family. A spent token presented again revokes the family (`refresh_reused`), except within 20 s of its rotation, which is two tabs racing (`refresh_superseded`, nothing issued). Mobile keeps the refresh token in SecureStore; the web app sends `X-Auth-Cookie: 1` and gets it as an httpOnly, Secure, SameSite=Lax cookie on `/auth` instead (the API at `api.fomertech.com` is same-site with `wardrobe.fomertech.com`), so `CORS_ORIGINS` is required outside local SQLite and credentials are allowed.
+
+New accounts get a verification email (Resend, `RESEND_API_KEY`, sender `EMAIL_FROM`; links to `APP_URL/auth/verify?token=…` plus the `smartwardrobe://` deep link). Until it is confirmed the wardrobe works but AI does not: `/outfits/suggest` answers 403 `email_unverified`, and `/items/analyze` stores the photo and returns empty tags with `ai_skipped: "email_unverified"`. Demo accounts are exempt. Without `RESEND_API_KEY` emails go to the fake backend (`services.email.OUTBOX`; the link is logged only with SQLite).
+
 ## Photo storage
 
 `STORAGE_BACKEND=db` keeps photos in the `images` table (local runs, tests). Production uses `s3`: the private R2 bucket `smartwardrobe-media`, nothing public. Every response carries a fresh presigned GET link (`image_url`, 15 min, `IMAGE_URL_SECONDS`) plus the stable `image_key` the app caches on; objects are stored with `Cache-Control: private, max-age=900`.
@@ -91,7 +97,11 @@ Rollback: set `STORAGE_BACKEND=db` again — the `images` table is untouched unt
 
 | Method | Path | |
 |---|---|---|
-| POST | `/auth/register`, `/auth/login` | email + password → token |
+| POST | `/auth/register`, `/auth/login` | email + password → `{access, refresh, user}`; register also emails a verification link |
+| POST | `/auth/refresh` | `{refresh}` (web: the `sw_refresh` cookie) → a new pair; the old refresh token is spent, and reusing a spent one revokes its whole family |
+| POST | `/auth/logout`, `/auth/logout-all` | this device / every device (`token_version++`, all refresh tokens revoked) |
+| POST | `/auth/verify`, `/auth/resend-verification` | `{token}` from the email / a new link (5 an hour) |
+| POST | `/auth/forgot`, `/auth/reset` | `{email}` → always 200 / `{token, password}` → new password, every session signed out |
 | POST | `/auth/demo` | private demo account with a 17-piece sample wardrobe (deleted after 24 h) |
 | GET/PATCH/DELETE | `/me` | profile, city, language; DELETE removes the account and every photo |
 | GET/PATCH | `/me/style` | style preferences `{answers: {q1 style, q2 palettes, q3 priority}, liked_colors, disliked_colors, styles, avoid}` (fixed vocabularies) + the rule-based taste summary |

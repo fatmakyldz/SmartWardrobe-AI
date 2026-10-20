@@ -26,7 +26,7 @@ def test_register_login_and_me(client):
 
     ok = client.post("/auth/login", json={"email": "a@example.com", "password": "supersecret1"})
     assert ok.status_code == 200
-    me = client.get("/me", headers={"Authorization": f"Bearer {ok.json()['token']}"})
+    me = client.get("/me", headers={"Authorization": f"Bearer {ok.json()['access']}"})
     assert me.json()["locale"] == "tr"
 
 
@@ -49,7 +49,7 @@ def test_update_profile(client, auth):
 def test_demo_account_has_wardrobe_and_images(client):
     r = client.post("/auth/demo", json={"locale": "tr"})
     assert r.status_code == 201
-    h = {"Authorization": f"Bearer {r.json()['token']}"}
+    h = {"Authorization": f"Bearer {r.json()['access']}"}
     items = client.get("/items", headers=h).json()
     assert len(items) == 17
     assert any(i["name"] == "Beyaz tişört" for i in items)
@@ -111,7 +111,7 @@ def test_analyze_then_create_item(client, auth, fake_ai):
 def test_cannot_use_someone_elses_image_key(client, auth, fake_ai):
     fake_ai.respond = lambda call, model: {"is_clothing": True, "category": "top"}
     other = client.post("/auth/register", json={"email": "other@example.com", "password": "supersecret1"}).json()
-    oh = {"Authorization": f"Bearer {other['token']}"}
+    oh = {"Authorization": f"Bearer {other['access']}"}
     key = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=oh).json()["image_key"]
     r = client.post("/items", json={"image_key": key, "category": "top"}, headers=auth)
     assert r.status_code == 400 and r.json()["detail"]["code"] == "invalid_image"
@@ -208,7 +208,7 @@ def test_wardrobe_full_uses_plan_max_items(client, auth):
 
 
 def test_demo_account_is_full_and_cannot_tag(client):
-    token = client.post("/auth/demo", json={}).json()["token"]
+    token = client.post("/auth/demo", json={}).json()["access"]
     h = {"Authorization": f"Bearer {token}"}
     key = client.get("/items", headers=h).json()[0]["image_key"]
     r = client.post("/items", json={"image_key": key, "category": "top"}, headers=h)
@@ -225,7 +225,7 @@ def test_suggest_needs_complete_wardrobe(client, auth):
 
 
 def test_suggest_validates_and_learns(client, fake_weather, fake_ai):
-    token = client.post("/auth/demo", json={"locale": "en"}).json()["token"]
+    token = client.post("/auth/demo", json={"locale": "en"}).json()["access"]
     h = {"Authorization": f"Bearer {token}"}
     prompts = []
 
@@ -266,7 +266,7 @@ def test_suggest_validates_and_learns(client, fake_weather, fake_ai):
 
 def _demo_with_outfit(client, monkeypatch):
     FAKE.respond = answer("bottom", "top", "shoes")
-    token = client.post("/auth/demo", json={}).json()["token"]
+    token = client.post("/auth/demo", json={}).json()["access"]
     h = {"Authorization": f"Bearer {token}"}
     outfit = client.post("/outfits/suggest", json={}, headers=h).json()["outfits"][0]
     return h, outfit
@@ -336,7 +336,7 @@ def test_suggest_without_weather_still_works(client, monkeypatch):
 
     monkeypatch.setattr("app.services.orchestration.get_weather", boom)
     FAKE.respond = answer()
-    token = client.post("/auth/demo", json={}).json()["token"]
+    token = client.post("/auth/demo", json={}).json()["access"]
     r = client.post("/outfits/suggest", json={}, headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200 and r.json()["weather"] is None
 
@@ -433,7 +433,7 @@ def test_delete_account_removes_everything(client, monkeypatch):
     from app.models import FeedbackEvent, Item, Outfit, OutfitItem, StoredImage, User, WardrobeImage
 
     FAKE.respond = answer()
-    token = client.post("/auth/demo", json={}).json()["token"]
+    token = client.post("/auth/demo", json={}).json()["access"]
     h = {"Authorization": f"Bearer {token}"}
     outfit = client.post("/outfits/suggest", json={}, headers=h).json()["outfits"][0]
     client.post(f"/outfits/{outfit['id']}/feedback", json={"rating": 1}, headers=h)
@@ -453,7 +453,7 @@ def test_rate_limit_on_suggest(client, fake_weather, monkeypatch):
 
     monkeypatch.setattr(get_settings(), "suggest_limit", "2/hour")
     FAKE.respond = answer()
-    token = client.post("/auth/demo", json={}).json()["token"]
+    token = client.post("/auth/demo", json={}).json()["access"]
     h = {"Authorization": f"Bearer {token}"}
     codes = [client.post("/outfits/suggest", json={}, headers=h).status_code for _ in range(3)]
     assert codes == [200, 200, 429]

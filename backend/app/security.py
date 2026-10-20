@@ -27,10 +27,12 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def create_token(user_id: uuid.UUID) -> str:
+def create_access_token(user: User) -> str:
+    """Short-lived (15 min). `tv` = users.token_version: bumping it signs every device out at once."""
     s = get_settings()
     now = datetime.now(timezone.utc)
-    payload = {"sub": str(user_id), "iat": now, "exp": now + timedelta(days=s.token_days)}
+    payload = {"sub": str(user.id), "iat": now, "exp": now + timedelta(minutes=s.access_token_minutes),
+               "tv": user.token_version}
     return jwt.encode(payload, s.secret_key, algorithm=ALGORITHM)
 
 
@@ -50,13 +52,26 @@ def current_user(
     if creds is None:
         raise _unauthorized()
     try:
-        payload = jwt.decode(creds.credentials, get_settings().secret_key, algorithms=[ALGORITHM])
+        payload = jwt.decode(creds.credentials, get_settings().secret_key, algorithms=[ALGORITHM],
+                             options={"require": ["exp", "sub", "tv"]})
         user_id = uuid.UUID(payload["sub"])
-    except (jwt.PyJWTError, KeyError, ValueError):
+        version = int(payload["tv"])
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         raise _unauthorized()
     user = db.get(User, user_id)
-    if user is None:
+    if user is None or user.token_version != version:
         raise _unauthorized()
     # Lets the rate limiter key on the user instead of the IP.
     request.state.user_id = str(user.id)
+    return user
+
+
+def is_verified(user: User) -> bool:
+    """AI features need a verified email (§14 C3); demo accounts are exempt."""
+    return user.is_demo or user.email_verified_at is not None
+
+
+def verified_user(user: User = Depends(current_user)) -> User:
+    if not is_verified(user):
+        raise HTTPException(403, detail={"code": "email_unverified"})
     return user

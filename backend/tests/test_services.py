@@ -18,7 +18,7 @@ from tests.helpers import answer
 
 
 def _demo(client, locale="en"):
-    token = client.post("/auth/demo", json={"locale": locale}).json()["token"]
+    token = client.post("/auth/demo", json={"locale": locale}).json()["access"]
     return {"Authorization": f"Bearer {token}"}
 
 
