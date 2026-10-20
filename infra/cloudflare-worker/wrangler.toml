@@ -6,3 +6,8 @@ workers_dev = false
 routes = [
   { pattern = "api.fomertech.com", custom_domain = true },
 ]
+
+# Web origins allowed to call the API with credentials (comma-separated). Kept here so a
+# `wrangler deploy` and the dashboard (Settings → Variables and Secrets) agree.
+[vars]
+ALLOWED_ORIGINS = "https://wardrobe.fomertech.com,https://smartwardrobe-ai-app.vercel.app"
