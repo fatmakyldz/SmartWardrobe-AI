@@ -12,7 +12,7 @@ import { ErrorBoundaryProps, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { Pressable, Text, useColorScheme, View } from 'react-native';
+import { Platform, Pressable, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/lib/api';
@@ -45,8 +45,9 @@ function Root() {
   });
 
   // A font that fails or times out (expo-font gives up after 12 s) falls back to the system font:
-  // waiting for it forever left a blank page.
-  const fontsDone = fontsLoaded || !!fontError;
+  // waiting for it forever left a blank page. The web doesn't wait at all: iOS Safari can sit on
+  // the font load for the whole 12 s, and the browser swaps the font in once it arrives.
+  const fontsDone = fontsLoaded || !!fontError || Platform.OS === 'web';
 
   useEffect(() => {
     if (ready && fontsDone) void SplashScreen.hideAsync();
