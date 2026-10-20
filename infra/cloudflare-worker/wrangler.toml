@@ -1,0 +1,8 @@
+name = "smartwardrobe-api-proxy"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+routes = [
+  { pattern = "api.fomertech.com", custom_domain = true },
+]
