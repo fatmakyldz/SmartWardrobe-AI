@@ -55,10 +55,14 @@ function Root() {
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: p.bg } }}>
         <Stack.Screen name="index" />
+        {/* Links from emails: open whether or not someone is signed in on this device. */}
+        <Stack.Screen name="auth/verify" />
+        <Stack.Screen name="auth/reset" />
         <Stack.Protected guard={!user}>
           <Stack.Screen name="welcome" />
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="sign-up" />
+          <Stack.Screen name="forgot" />
         </Stack.Protected>
         <Stack.Protected guard={!!user}>
           <Stack.Screen name="(tabs)" />

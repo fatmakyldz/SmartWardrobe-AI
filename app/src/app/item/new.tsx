@@ -15,7 +15,7 @@ import { radius, space, usePalette } from '@/lib/theme';
 
 const close = () => (router.canGoBack() ? router.back() : router.replace('/wardrobe'));
 
-type Draft = { key: string; url: string; isClothing: boolean; tags: Tags };
+type Draft = { key: string; url: string; isClothing: boolean; aiSkipped: boolean; tags: Tags };
 
 export default function NewItem() {
   const p = usePalette();
@@ -42,7 +42,7 @@ export default function NewItem() {
     setAnalyzing(true);
     try {
       const out = await api.analyze(asset as PickedImage, lang);
-      setDraft({ key: out.image_key, url: out.image_url, isClothing: out.is_clothing, tags: out.tags });
+      setDraft({ key: out.image_key, url: out.image_url, isClothing: out.is_clothing, aiSkipped: !!out.ai_skipped, tags: out.tags });
     } catch (e) {
       setError(errorText(e));
       setPreview(null);
@@ -119,7 +119,7 @@ export default function NewItem() {
 
       {draft ? (
         <View style={{ marginTop: space.xl, gap: space.xl }}>
-          {!draft.isClothing ? <Notice>{t.add.notClothing}</Notice> : null}
+          {draft.aiSkipped ? <Notice>{t.add.aiSkipped}</Notice> : !draft.isClothing ? <Notice>{t.add.notClothing}</Notice> : null}
           <TagEditor value={draft.tags} onChange={(tags) => setDraft({ ...draft, tags })} />
           <Button label={t.add.save} onPress={save} loading={create.isPending} />
           <Button

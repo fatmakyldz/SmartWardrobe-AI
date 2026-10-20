@@ -30,7 +30,7 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
       const res = isUp
         ? await api.register({ email: email.trim(), password, name: name.trim(), locale: lang })
         : await api.login({ email: email.trim(), password });
-      await signIn(res.token, res.user);
+      await signIn(res);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -82,6 +82,7 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           />
           {error ? <Notice tone="error">{error}</Notice> : null}
           <Button label={isUp ? t.auth.signUp : t.auth.signIn} onPress={submit} loading={busy} disabled={!valid} />
+          {!isUp ? <Button label={t.auth.forgot} kind="ghost" onPress={() => router.push('/forgot')} /> : null}
           <Button
             label={isUp ? t.auth.haveAccount : t.auth.noAccount}
             kind="ghost"

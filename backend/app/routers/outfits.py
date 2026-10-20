@@ -12,7 +12,7 @@ from ..entitlements import UserBudget, entitlements, require_feature
 from ..models import User
 from ..ratelimit import limiter
 from ..schemas import FeedbackIn, OutfitCreateIn, OutfitItemsIn, OutfitOut, SuggestIn, SuggestOut, WeatherOut
-from ..security import current_user
+from ..security import current_user, verified_user
 from ..serialize import outfit_out
 from ..services import feedback as feedback_service
 from ..services import orchestration
@@ -31,7 +31,7 @@ def suggest(
     request: Request,
     body: SuggestIn,
     idempotency_key: str | None = Header(default=None, max_length=100),
-    user: User = Depends(current_user),
+    user: User = Depends(verified_user),
     db: Session = Depends(get_db),
 ):
     ent = entitlements(user, db)

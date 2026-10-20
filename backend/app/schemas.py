@@ -25,9 +25,27 @@ class DemoIn(BaseModel):
     locale: Lang = "en"
 
 
-class TokenOut(BaseModel):
-    token: str
+class AuthOut(BaseModel):
+    access: str  # 15-minute JWT
+    refresh: str | None  # 30 days, single use; None on the web, where it is set as an httpOnly cookie
     user: "UserOut"
+
+
+class RefreshIn(BaseModel):
+    refresh: str | None = Field(default=None, max_length=200)  # omitted on the web: read from the cookie
+
+
+class TokenIn(BaseModel):
+    token: str = Field(max_length=200)
+
+
+class ForgotIn(BaseModel):
+    email: EmailStr
+
+
+class ResetIn(BaseModel):
+    token: str = Field(max_length=200)
+    password: str = Field(min_length=8, max_length=128)
 
 
 class UserOut(BaseModel):
@@ -41,6 +59,7 @@ class UserOut(BaseModel):
     lat: float | None
     lon: float | None
     is_demo: bool
+    email_verified_at: datetime | None
 
 
 class UserUpdate(BaseModel):
@@ -67,6 +86,7 @@ class AnalyzeOut(BaseModel):
     image_url: str
     is_clothing: bool
     tags: Tags
+    ai_skipped: str | None = None  # "email_unverified": photo stored, tags left for the user
 
 
 class ItemIn(Tags):
@@ -201,4 +221,4 @@ class VocabOut(BaseModel):
     priorities: list[str]
 
 
-TokenOut.model_rebuild()
+AuthOut.model_rebuild()

@@ -1,14 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { api, setToken, setUnauthorizedHandler, User } from './api';
+import { api, refreshSession, Session, setRefreshedHandler, setSession, setUnauthorizedHandler, User } from './api';
 import { useI18n } from './i18n';
-import { readToken, writeToken } from './tokenStore';
+import { readRefreshToken, writeRefreshToken } from './tokenStore';
 
 type AuthCtx = {
   ready: boolean;
   user: User | null;
-  signIn: (token: string, user: User) => Promise<void>;
+  signIn: (s: Session) => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (u: User) => void;
 };
@@ -29,38 +29,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [setLang],
   );
 
-  const signOut = useCallback(async () => {
-    setToken(null);
-    await writeToken(null);
+  // Local sign-out: forget the session here (the server side is already dead or being revoked).
+  const clear = useCallback(async () => {
+    setSession({ access: null, refresh: null });
+    await writeRefreshToken(null);
     setUserState(null);
     qc.clear();
   }, [qc]);
 
+  const signOut = useCallback(async () => {
+    await api.logout().catch(() => undefined); // revokes this device's refresh token / clears the cookie
+    await clear();
+  }, [clear]);
+
   const signIn = useCallback(
-    async (token: string, u: User) => {
-      setToken(token);
-      await writeToken(token);
-      setUser(u);
+    async (s: Session) => {
+      setSession(s);
+      await writeRefreshToken(s.refresh);
+      setUser(s.user);
     },
     [setUser],
   );
 
   useEffect(() => {
-    setUnauthorizedHandler(() => void signOut());
+    setUnauthorizedHandler(() => void clear());
+    // Each refresh spends the stored token: keep the new one.
+    setRefreshedHandler((s) => void writeRefreshToken(s.refresh));
     (async () => {
-      const saved = await readToken();
-      if (saved) {
-        setToken(saved);
-        try {
-          setUser(await api.me());
-        } catch {
-          setToken(null);
-          await writeToken(null);
-        }
+      // Access tokens are never stored, so every start begins with a refresh (cookie on the web).
+      const saved = await readRefreshToken();
+      setSession({ access: null, refresh: saved });
+      try {
+        const s = await refreshSession();
+        if (s) setUser(s.user);
+        else await clear();
+      } catch {
+        // offline: stay signed out for now; the stored refresh token is kept for the next start
+        setSession({ access: null, refresh: saved });
       }
       setReady(true);
     })();
-  }, [setUser, signOut]);
+  }, [setUser, clear]);
 
   const value = useMemo(() => ({ ready, user, signIn, signOut, setUser }), [ready, user, signIn, signOut, setUser]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -27,6 +27,8 @@ os.environ["AI_ROUTES"] = json.dumps({
 })
 os.environ["SECRET_KEY"] = "test-secret-key-that-is-long-enough-32b"
 os.environ["PUBLIC_BASE_URL"] = "http://testserver"
+os.environ["CORS_ORIGINS"] = "https://wardrobe.fomertech.com"  # required with Postgres (CI runs both)
+os.environ["RESEND_API_KEY"] = ""  # the fake email backend: messages land in services.email.OUTBOX
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -62,11 +64,37 @@ def client():
     return TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def outbox():
+    from app.services import email
+
+    email.OUTBOX.clear()
+    return email.OUTBOX
+
+
+def verify_email(email: str) -> None:
+    from datetime import datetime, timezone
+
+    from app.db import SessionLocal
+    from app.models import User
+
+    with SessionLocal() as db:
+        db.query(User).filter(User.email == email).one().email_verified_at = datetime.now(timezone.utc)
+        db.commit()
+
+
 @pytest.fixture
-def auth(client):
+def unverified_auth(client):
     r = client.post("/auth/register", json={"email": "fatma@example.com", "password": "supersecret1", "name": "Fatma"})
     assert r.status_code == 201, r.text
-    return {"Authorization": f"Bearer {r.json()['token']}"}
+    return {"Authorization": f"Bearer {r.json()['access']}"}
+
+
+@pytest.fixture
+def auth(unverified_auth):
+    """A signed-in account with a verified email (AI features need one)."""
+    verify_email("fatma@example.com")
+    return unverified_auth
 
 
 @pytest.fixture

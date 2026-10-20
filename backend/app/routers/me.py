@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
+from ..ai import telemetry
 from ..db import get_db
 from ..models import User
 from ..schemas import StyleIn, StyleOut, UserOut, UserUpdate
@@ -22,7 +23,9 @@ def update_me(body: UserUpdate, user: User = Depends(current_user), db: Session 
 
 @router.delete("", status_code=204)
 def delete_me(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Deletes the account, wardrobe, outfits and photos (required by the App Store)."""
+    """Deletes the account, wardrobe, outfits and photos (required by the App Store). Sessions and email
+    tokens go by cascade; AI telemetry keeps no link to the person."""
+    telemetry.forget_subject(db, user.id)  # same transaction as the account rows
     profile.delete_account(db, user)
     return Response(status_code=204)
 
