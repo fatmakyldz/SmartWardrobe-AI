@@ -17,5 +17,5 @@ npm run typecheck && npm run lint
 
 The product name is set in `src/lib/brand.ts` and `app.json` (`name`).
 
-**Web**: `npm run export:web` → `dist/` (Vercel config in `vercel.json`).
+**Web**: `npm run export:web` → `dist/` (Vercel config in `vercel.json`). Live at https://wardrobe.fomertech.com; Vercel builds every push to `main`. Production builds read the API address from `.env.production` (public values, committed); put local overrides in `.env.local`.
 **Stores**: `npx eas-cli@latest build --profile preview` (internal APK / TestFlight-ready iOS), `--profile production` for store builds; see `eas.json`.
