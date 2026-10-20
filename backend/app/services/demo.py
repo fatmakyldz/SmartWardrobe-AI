@@ -3,19 +3,15 @@
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..images import normalize
 from ..models import Item, User
 from ..security import hash_password
-from ..storage import get_storage
+from .images import demo_key, ensure_demo_images
 from .profile import delete_account
-
-ASSETS = Path(__file__).parent.parent / "demo_assets"
 
 # file, category, subcategory, colors, pattern, warmth, formality, seasons, name en, name tr
 ALL = ["spring", "summer", "autumn", "winter"]
@@ -45,6 +41,8 @@ DEMO_LAT, DEMO_LON = 41.0082, 28.9784
 
 
 def create_demo_user(db: Session, locale: str) -> User:
+    # The 17 pictures are shared by every demo account (§14 C5): uploaded once, never copied per visitor.
+    ensure_demo_images(db, [row[0] for row in DEMO_ITEMS])
     user = User(
         email=f"demo-{uuid.uuid4().hex[:12]}@demo.example.com",
         password_hash=hash_password(secrets.token_urlsafe(24)),  # unusable; demo users can't log in
@@ -59,15 +57,11 @@ def create_demo_user(db: Session, locale: str) -> User:
     db.add(user)
     db.flush()
 
-    storage = get_storage()
     for file, cat, sub, colors, pattern, warmth, formality, seasons, name_en, name_tr in DEMO_ITEMS:
-        stored, _ = normalize((ASSETS / f"{file}.png").read_bytes(), 10)
-        key = f"u/{user.id.hex}/{uuid.uuid4().hex}.webp"
-        storage.put(db, key, stored, "image/webp")
         db.add(
             Item(
                 user_id=user.id,
-                image_key=key,
+                image_key=demo_key(file),
                 name=name_tr if locale == "tr" else name_en,
                 category=cat,
                 subcategory=sub,

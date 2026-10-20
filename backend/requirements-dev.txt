@@ -1,3 +1,4 @@
 -r requirements.txt
 pytest==9.1.1
 cairosvg==2.8.2
+moto[s3]==5.2.4

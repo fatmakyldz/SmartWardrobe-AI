@@ -58,4 +58,6 @@ Design: [`docs/AI-00-foundation.md`](docs/AI-00-foundation.md) — Claude primar
 - [x] AI-02 Schema migration — `0002_ai_foundation` (new fields, ten tables, `item_ids` → `outfit_items`, ratings → `feedback_events`), Postgres + `alembic check` in CI
 - [x] AI-03 AI gateway + entitlements — `app/ai/` (Claude primary, Groq fallback, retries, telemetry), `app/entitlements/` (plans, daily budget, grants)
 - [ ] AI-04 Context + services — `app/services/` (only writer of business data), pure `ai/context.py` (§6 pre-filter, ordering, PII masking), rule-based taste summary, user outfits / edit / worn / style / vocab endpoints *(this PR)*
-- [ ] AI-05 … AI-09 — storage + auth, intelligence features, onboarding, entitlements UI, V1.0 hardening; scope and order in the design doc (§13)
+- [ ] AI-05a Storage — private R2 bucket with 15-min presigned links, `wardrobe_images` lifecycle, shared demo pictures, `migrate_images_to_r2.py` / `cleanup_orphans.py`, owner-only `/images`, `0004_cleanup` written (deferred to AI-09) *(this PR)*
+- [ ] AI-05b Auth — 15-min access + rotating refresh tokens, email verification, password reset, app token flow
+- [ ] AI-06 … AI-09 — intelligence features, onboarding, entitlements UI, V1.0 hardening; scope and order in the design doc (§13)

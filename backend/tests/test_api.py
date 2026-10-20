@@ -53,8 +53,11 @@ def test_demo_account_has_wardrobe_and_images(client):
     items = client.get("/items", headers=h).json()
     assert len(items) == 17
     assert any(i["name"] == "Beyaz tişört" for i in items)
-    img = client.get(items[0]["image_url"].replace("http://testserver", ""))
+    # the 17 pictures are shared system objects, not copies per demo account (§14 C5)
+    assert all(i["image_key"].startswith("demo/") for i in items)
+    img = client.get(items[0]["image_url"].replace("http://testserver", ""), headers=h)
     assert img.status_code == 200 and img.headers["content-type"] == "image/webp"
+    assert img.headers["cache-control"] == "private, max-age=900"
 
 
 def test_demo_cannot_log_in_with_password(client):
@@ -90,7 +93,7 @@ def test_analyze_then_create_item(client, auth, fake_ai):
     assert body["tags"]["seasons"] == ["autumn"]
 
     # stored image is a downscaled WEBP
-    img = client.get(body["image_url"].replace("http://testserver", ""))
+    img = client.get(body["image_url"].replace("http://testserver", ""), headers=auth)
     stored = Image.open(io.BytesIO(img.content))
     assert stored.format == "WEBP" and max(stored.size) <= 1024
 
@@ -105,12 +108,19 @@ def test_analyze_then_create_item(client, auth, fake_ai):
     assert client.get("/items", headers=auth).json() == []
 
 
-def test_cannot_use_someone_elses_image_key(client, auth):
-    other = client.post("/auth/demo", json={}).json()["token"]
-    other_items = client.get("/items", headers={"Authorization": f"Bearer {other}"}).json()
-    key = other_items[0]["image_url"].split("/images/")[1]
+def test_cannot_use_someone_elses_image_key(client, auth, fake_ai):
+    fake_ai.respond = lambda call, model: {"is_clothing": True, "category": "top"}
+    other = client.post("/auth/register", json={"email": "other@example.com", "password": "supersecret1"}).json()
+    oh = {"Authorization": f"Bearer {other['token']}"}
+    key = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=oh).json()["image_key"]
     r = client.post("/items", json={"image_key": key, "category": "top"}, headers=auth)
-    assert r.status_code == 400
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "invalid_image"
+    # nor a shared demo picture, nor a key under one's own prefix that was never uploaded
+    for bad in ("demo/white-tee.webp", f"u/{other['user']['id'].replace('-', '')}/x.webp"):
+        assert client.post("/items", json={"image_key": bad, "category": "top"}, headers=auth).status_code == 400
+    # an uploaded key goes on one item only
+    assert client.post("/items", json={"image_key": key, "category": "top"}, headers=oh).status_code == 201
+    assert client.post("/items", json={"image_key": key, "category": "top"}, headers=oh).status_code == 400
 
 
 def test_rejects_non_image(client, auth):
@@ -136,7 +146,7 @@ def test_ai_not_configured(client, auth, monkeypatch):
 def test_analyze_runs_off_the_event_loop(client, auth, monkeypatch, fake_ai):
     import asyncio
 
-    import app.services.wardrobe as wardrobe_service
+    import app.services.images as wardrobe_service
 
     def on_loop() -> bool:
         try:
@@ -177,12 +187,14 @@ def test_wardrobe_full_uses_plan_max_items(client, auth):
     from datetime import datetime, timezone
 
     from app.db import SessionLocal
-    from app.models import EntitlementGrant, Item, User
+    from app.models import EntitlementGrant, Item, User, WardrobeImage
 
     with SessionLocal() as db:
         user = db.query(User).one()
         uid = user.id
         db.add_all([Item(user_id=uid, image_key=f"u/{uid.hex}/{n}.webp", category="top") for n in range(50)])
+        db.add(WardrobeImage(key=f"u/{uid.hex}/new.webp", user_id=uid, content_type="image/webp",
+                             bytes=1, width=1, height=1))
         db.commit()
     body = {"image_key": f"u/{uid.hex}/new.webp", "category": "top"}
     r = client.post("/items", json=body, headers=auth)
@@ -198,7 +210,7 @@ def test_wardrobe_full_uses_plan_max_items(client, auth):
 def test_demo_account_is_full_and_cannot_tag(client):
     token = client.post("/auth/demo", json={}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
-    key = client.get("/items", headers=h).json()[0]["image_url"].split("/images/")[1]
+    key = client.get("/items", headers=h).json()[0]["image_key"]
     r = client.post("/items", json={"image_key": key, "category": "top"}, headers=h)
     assert r.status_code == 400 and r.json()["detail"]["code"] == "wardrobe_full"  # demo plan: its 17 pieces
     r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=h)
@@ -418,7 +430,7 @@ def test_cloudflare_proxy_setting(monkeypatch):
 
 def test_delete_account_removes_everything(client, monkeypatch):
     from app.db import SessionLocal
-    from app.models import FeedbackEvent, Item, Outfit, OutfitItem, StoredImage, User
+    from app.models import FeedbackEvent, Item, Outfit, OutfitItem, StoredImage, User, WardrobeImage
 
     FAKE.respond = answer()
     token = client.post("/auth/demo", json={}).json()["token"]
@@ -428,8 +440,12 @@ def test_delete_account_removes_everything(client, monkeypatch):
     assert client.delete("/me", headers=h).status_code == 204
     assert client.get("/me", headers=h).status_code == 401
     with SessionLocal() as db:
-        for model in (User, Item, StoredImage, Outfit, OutfitItem, FeedbackEvent):
+        for model in (User, Item, Outfit, OutfitItem, FeedbackEvent):
             assert db.query(model).count() == 0, model.__tablename__
+        # the shared demo pictures outlive every demo account
+        assert {i.key for i in db.query(StoredImage)} == {w.key for w in db.query(WardrobeImage)}
+        assert db.query(WardrobeImage).count() == 17
+        assert all(w.key.startswith("demo/") and w.user_id is None for w in db.query(WardrobeImage))
 
 
 def test_rate_limit_on_suggest(client, fake_weather, monkeypatch):

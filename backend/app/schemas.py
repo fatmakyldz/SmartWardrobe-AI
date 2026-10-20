@@ -94,6 +94,7 @@ class ItemOut(BaseModel):
     warmth: int
     formality: int
     seasons: list[str]
+    image_key: str  # stable: the app's image cache key (image_url is a fresh short-lived link each time)
     image_url: str
     created_at: datetime
 

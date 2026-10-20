@@ -44,7 +44,8 @@ export type Tags = {
   seasons: string[];
 };
 
-export type Item = Tags & { id: string; image_url: string; created_at: string };
+// image_url is a short-lived link (a fresh one in every response); image_key is stable and is the image cache key.
+export type Item = Tags & { id: string; image_key: string; image_url: string; created_at: string };
 
 export type Weather = {
   temp: number | null;
@@ -86,8 +87,13 @@ export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn;
 }
 
-export function imageUrl(url: string): string {
-  return url.startsWith('http') ? url : `${API_URL}${url}`;
+// expo-image source for a photo. The cache is keyed on image_key, so a new link for the same photo is
+// a cache hit. Database storage mode serves /images from the API to the signed-in owner only, so those
+// requests carry the token; presigned bucket links are signed already (an extra header would break them).
+export function imageSource(url: string, key?: string): { uri: string; cacheKey?: string; headers?: Record<string, string> } {
+  const uri = url.startsWith('http') ? url : `${API_URL}${url}`;
+  const fromApi = uri.startsWith(`${API_URL}/images/`);
+  return { uri, cacheKey: key, headers: fromApi && token ? { Authorization: `Bearer ${token}` } : undefined };
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

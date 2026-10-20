@@ -3,6 +3,7 @@
 Runs against the test database (SQLite, or Postgres when TEST_DATABASE_URL is set).
 """
 
+import os
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -196,3 +197,30 @@ def test_mark_existing_verified_script(migrate):
     marked = {r.email: r.email_verified_at for r in rows}
     assert marked["demo@example.com"] is None
     assert _utc(marked["a@example.com"]) == created
+
+
+# ── 0004_cleanup: written in AI-05, applied in AI-09 ──────────────────────
+
+def test_cleanup_revision_is_deferred(migrate):
+    from alembic.script import ScriptDirectory
+
+    cfg = Config(str(BACKEND / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND / "migrations"))
+    assert ScriptDirectory.from_config(cfg).get_current_head() == "0003_ai_estimate"  # head is untouched
+
+    # With the deferred folder added it upgrades and downgrades cleanly.
+    def run(cmd, rev):
+        c = Config(str(BACKEND / "alembic.ini"))
+        c.set_main_option("script_location", str(BACKEND / "migrations"))
+        folders = [str(BACKEND / "migrations" / d) for d in ("versions", "deferred")]
+        c.set_main_option("version_locations", os.pathsep.join(folders))  # path_separator = os
+        with engine.connect() as conn:
+            c.attributes["connection"] = conn
+            getattr(command, cmd)(c, rev)
+            conn.commit()
+
+    migrate("upgrade", "head")
+    run("upgrade", "0004_cleanup")
+    assert "images" not in sa.inspect(engine).get_table_names() and "item_ids" not in _columns("outfits")
+    run("downgrade", "0003_ai_estimate")
+    assert "images" in sa.inspect(engine).get_table_names() and "item_ids" in _columns("outfits")

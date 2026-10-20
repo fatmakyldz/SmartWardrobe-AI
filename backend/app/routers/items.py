@@ -13,7 +13,7 @@ from ..ratelimit import limiter
 from ..schemas import AnalyzeOut, ItemIn, ItemOut, ItemUpdate, Tags
 from ..security import current_user
 from ..serialize import item_out
-from ..services import wardrobe
+from ..services import images, wardrobe
 from ..storage import get_storage
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -36,7 +36,7 @@ def analyze(
     require_feature(ent, "tagging")
 
     s = get_settings()
-    key, small = wardrobe.store_upload(db, user, image.file.read(s.max_upload_mb * 1024 * 1024 + 1), s.max_upload_mb)
+    key, small = images.store_upload(db, user, image.file.read(s.max_upload_mb * 1024 * 1024 + 1), s.max_upload_mb)
     lang = "tr" if lang == "tr" else "en"
 
     # The same photo sent twice within a minute (double tap, retry) is tagged once.
