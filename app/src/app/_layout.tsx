@@ -8,11 +8,11 @@ import {
   useFonts,
 } from '@expo-google-fonts/bricolage-grotesque';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { ErrorBoundaryProps, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { Pressable, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/lib/api';
@@ -35,7 +35,7 @@ function Root() {
   const p = usePalette();
   const scheme = useColorScheme();
   const { ready, user } = useAuth();
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     BricolageGrotesque_300Light,
     BricolageGrotesque_400Regular,
     BricolageGrotesque_500Medium,
@@ -44,11 +44,15 @@ function Root() {
     BricolageGrotesque_800ExtraBold,
   });
 
-  useEffect(() => {
-    if (ready && fontsLoaded) void SplashScreen.hideAsync();
-  }, [ready, fontsLoaded]);
+  // A font that fails or times out (expo-font gives up after 12 s) falls back to the system font:
+  // waiting for it forever left a blank page.
+  const fontsDone = fontsLoaded || !!fontError;
 
-  if (!ready || !fontsLoaded) return null;
+  useEffect(() => {
+    if (ready && fontsDone) void SplashScreen.hideAsync();
+  }, [ready, fontsDone]);
+
+  if (!ready || !fontsDone) return null;
 
   return (
     <>
@@ -71,6 +75,23 @@ function Root() {
         </Stack.Protected>
       </Stack>
     </>
+  );
+}
+
+// Last resort: a render error anywhere shows its message instead of a blank page. Outside the
+// providers, so plain components and both languages.
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  void SplashScreen.hideAsync();
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 16, backgroundColor: '#ECE8E3' }}>
+      <Text style={{ fontSize: 18, color: '#2a1b26' }}>Something went wrong. / Bir şeyler ters gitti.</Text>
+      <Text selectable style={{ fontSize: 13, color: '#6b5a66' }}>
+        {error.name}: {error.message}
+      </Text>
+      <Pressable accessibilityRole="button" onPress={() => void retry()} style={{ alignSelf: 'flex-start', paddingVertical: 8 }}>
+        <Text style={{ fontSize: 16, color: '#4b2e45', textDecorationLine: 'underline' }}>Try again / Tekrar dene</Text>
+      </Pressable>
+    </View>
   );
 }
 
