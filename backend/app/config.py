@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -42,6 +43,9 @@ class Settings(BaseSettings):
     # Default: loopback + private ranges, where the Hugging Face Space load balancer connects from.
     # Empty = loopback only. Never "*": anyone could then fake their IP and skip the rate limits.
     trusted_proxy_hosts: str = "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    # Also trust Cloudflare's published ranges (app/cloudflare_ips.txt): set when requests come
+    # through the api.fomertech.com Worker, so its X-Forwarded-For carries the visitor's IP.
+    cloudflare_proxy: bool = False
 
     # Per-user limits on the paid-by-quota LLM endpoints.
     analyze_limit: str = "30/hour"
@@ -58,7 +62,18 @@ class Settings(BaseSettings):
     @property
     def trusted_proxy_list(self) -> list[str]:
         hosts = [h.strip() for h in self.trusted_proxy_hosts.split(",") if h.strip()]
-        return hosts or ["127.0.0.1", "::1"]
+        hosts = hosts or ["127.0.0.1", "::1"]
+        if self.cloudflare_proxy:
+            hosts += cloudflare_ranges()
+        return hosts
+
+
+CLOUDFLARE_IPS_FILE = Path(__file__).with_name("cloudflare_ips.txt")
+
+
+def cloudflare_ranges() -> list[str]:
+    lines = (line.strip() for line in CLOUDFLARE_IPS_FILE.read_text().splitlines())
+    return [line for line in lines if line and not line.startswith("#")]
 
 
 @lru_cache
