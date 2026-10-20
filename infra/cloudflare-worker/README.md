@@ -20,6 +20,6 @@ Or in the dashboard: Workers & Pages → Create → Worker `smartwardrobe-api-pr
 ## Notes
 
 - The app still calls the hf.space URL; switching it to `api.fomertech.com` is part of AI-05.
-- Client IP: the Worker sets `X-Forwarded-For` to the visitor's IP, but the API trusts that
-  header only from private ranges (`TRUSTED_PROXY_HOSTS`). Until AI-05 decides how to trust
-  the Worker, requests via `api.fomertech.com` share the Worker's IP for anonymous rate limits.
+- Client IP: the Worker sets `X-Forwarded-For` to the visitor's IP. The API believes it only
+  with `CLOUDFLARE_PROXY=true` on the Space (see `backend/README.md`, "Behind a proxy");
+  without it, requests via `api.fomertech.com` share the Worker's IP for anonymous rate limits.

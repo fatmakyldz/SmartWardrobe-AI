@@ -89,6 +89,8 @@ Rate limits for anonymous endpoints (`/auth/register`, `/auth/login`, `/auth/dem
 - Empty — loopback only.
 - Never `*`: any caller could then send a fake `X-Forwarded-For` and get a fresh rate-limit bucket on every request.
 
+- `CLOUDFLARE_PROXY=true` — also trust Cloudflare's published edge ranges, for requests that come through the `api.fomertech.com` Worker (`infra/cloudflare-worker/`). The Worker sets `X-Forwarded-For` to the visitor's IP and the Space's load balancer appends the Worker's Cloudflare egress IP, so without this every visitor shares that one IP. The ranges live in `app/cloudflare_ips.txt`, copied from Cloudflare's official lists <https://www.cloudflare.com/ips-v4> and <https://www.cloudflare.com/ips-v6> (also at <https://www.cloudflare.com/ips/>); refresh with `python scripts/update_cloudflare_ips.py` and commit. A direct caller faking the header still gets its real IP: the load balancer appends it last, and it isn't in any trusted range. Caveat: any Cloudflare Worker, not only ours, connects from these ranges, so someone could run their own Worker against the hf.space URL with a made-up `X-Forwarded-For`; that costs them a Worker per bypass attempt, and the per-user limits on the AI endpoints are not IP-based.
+
 uvicorn's own proxy handling is turned off in the `Dockerfile` (`--no-proxy-headers`) so this setting is the single place that decides. If the host changes, check the address the proxy connects from (`request.client.host` without the middleware) and set the variable.
 
 Other limits: `MAX_UPLOAD_MB` (default 10), the hourly `ANALYZE_LIMIT` / `SUGGEST_LIMIT` / `DEMO_LIMIT`; plan limits are under "Plans and limits" below.

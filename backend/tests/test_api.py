@@ -366,6 +366,54 @@ def test_trusted_proxy_hosts_setting(monkeypatch):
     assert Settings().trusted_proxy_list == ["10.0.0.0/8", "127.0.0.1"]
 
 
+def _client_ip(cloudflare_proxy: bool, remote_ip: str, forwarded_for: str) -> str:
+    """The client IP the app sees, with the same proxy middleware and settings as main.py."""
+    from fastapi import FastAPI, Request
+    from fastapi.testclient import TestClient
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+    from app.config import Settings
+
+    probe = FastAPI()
+
+    @probe.get("/ip")
+    def ip(request: Request) -> str:
+        return request.client.host
+
+    probe.add_middleware(
+        ProxyHeadersMiddleware, trusted_hosts=Settings(cloudflare_proxy=cloudflare_proxy).trusted_proxy_list
+    )
+    c = TestClient(probe, client=(remote_ip, 50000))
+    return c.get("/ip", headers={"X-Forwarded-For": forwarded_for}).json()
+
+
+def test_cloudflare_proxy_forwarded_for_is_used():
+    # Worker → Space load balancer: X-Forwarded-For is "visitor, Cloudflare egress".
+    chain = "198.51.100.1, 104.16.0.10"
+    assert _client_ip(False, "10.16.0.4", chain) == "104.16.0.10"  # everyone shares the Worker's IP
+    assert _client_ip(True, "10.16.0.4", chain) == "198.51.100.1"
+    assert _client_ip(True, "10.16.0.4", "198.51.100.1, 2606:4700::1") == "198.51.100.1"
+
+
+def test_cloudflare_proxy_still_refuses_spoofed_forwarded_for():
+    # A direct caller faking the header: the load balancer appends the caller's real IP.
+    assert _client_ip(True, "10.16.0.4", "1.1.1.1, 203.0.113.7") == "203.0.113.7"
+    # A caller that isn't a trusted proxy at all.
+    assert _client_ip(True, "203.0.113.7", "1.1.1.1") == "203.0.113.7"
+
+
+def test_cloudflare_proxy_setting(monkeypatch):
+    from app.config import Settings, cloudflare_ranges
+
+    ranges = cloudflare_ranges()
+    assert "173.245.48.0/20" in ranges and "2400:cb00::/32" in ranges
+    assert all("/" in r and not r.startswith("#") for r in ranges)
+    assert not set(ranges) & set(Settings().trusted_proxy_list)  # off by default
+    monkeypatch.setenv("CLOUDFLARE_PROXY", "true")
+    assert set(ranges) <= set(Settings().trusted_proxy_list)
+    assert "*" not in Settings().trusted_proxy_list
+
+
 # ── account deletion ────────────────────────────────────────────────────
 
 def test_delete_account_removes_everything(client, monkeypatch):
