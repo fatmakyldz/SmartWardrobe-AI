@@ -6,7 +6,7 @@
 
 | Path | |
 |---|---|
-| `backend/` | FastAPI + SQLAlchemy 2 + Alembic. `app/routers/` (auth, me, items, outfits, misc), `app/ai/` (gateway, routing, providers anthropic/groq/fake, prompts, schemas, features; models only in `routes.default.json`), `app/entitlements/` (plans, daily budget), `app/services/` (the only writers of business data; `orchestration.py` hands DTOs to the pure `ai/context.py`), `app/config.py` (all settings, env-overridable), `app/storage.py` (db / s3), `migrations/`, `scripts/`, `tests/` |
+| `backend/` | FastAPI + SQLAlchemy 2 + Alembic. `app/routers/` (auth, me, items, outfits, misc), `app/ai/` (gateway, routing, providers anthropic/groq/fake, prompts, schemas, features; `context.py` and `analysis.py` are pure — DTOs in, DTOs out; models only in `routes.default.json`), `app/entitlements/` (plans, daily budget), `app/services/` (the only writers of business data; `orchestration.py` hands DTOs to the pure `ai/context.py`), `app/config.py` (all settings, env-overridable), `app/storage.py` (db / s3), `migrations/`, `scripts/`, `tests/` |
 | `app/` | Expo (React Native) app for iOS, Android, web; EN/TR. Screens in `src/app/` (Expo Router), data hooks in `src/lib/queries.ts` (TanStack Query). **Read `app/AGENTS.md` before touching the app.** |
 | `docs/` | design docs (`AI-00-foundation.md`) |
 | `ROADMAP.md` | phases and status |

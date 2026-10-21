@@ -50,9 +50,20 @@ class FeedbackDTO:
 
 @dataclass(frozen=True)
 class IntentDTO:
-    """Parsed natural-language request (AI-06). Only the occasion is used so far."""
+    """Parsed natural-language request (AI-06): vocabulary values only, plus a one-line English brief."""
 
     occasion: str | None = None
+    include_categories: tuple[str, ...] = ()
+    include_colors: tuple[str, ...] = ()
+    avoid_categories: tuple[str, ...] = ()
+    avoid_colors: tuple[str, ...] = ()
+    avoid_patterns: tuple[str, ...] = ()
+    wants_outerwear: bool | None = None
+    brief: str = ""
+
+    @property
+    def has_avoids(self) -> bool:
+        return bool(self.avoid_categories or self.avoid_colors or self.avoid_patterns)
 
 
 @dataclass(frozen=True)
@@ -66,6 +77,15 @@ class ContextLimits:
 
 
 DEFAULT_LIMITS = ContextLimits()
+
+
+@dataclass(frozen=True)
+class CapsuleContext:
+    """What the model sees when asked to explain a deterministic capsule (AI-06)."""
+
+    text: str
+    item_ids: tuple[uuid.UUID, ...]
+    estimated_tokens: int
 
 
 @dataclass(frozen=True)

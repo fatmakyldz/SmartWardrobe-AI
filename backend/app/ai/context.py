@@ -11,6 +11,7 @@ from ..vocab import OCCASION_FORMALITY
 from ..weather import describe
 from .schemas.context import (
     DEFAULT_LIMITS,
+    CapsuleContext,
     ContextLimits,
     FeedbackDTO,
     IntentDTO,
@@ -21,6 +22,9 @@ from .schemas.context import (
 )
 
 RELAX_ORDER = ("season", "warmth", "formality")
+# A parsed request's avoid-lists are a 4th rule, relaxed only after the weather and occasion rules:
+# "no dress" is the clearest signal the user gave.
+REQUEST_RULE = "request"
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)+")
 _PHONE = re.compile(r"(?<![\w(])[+(]?\d[\d\s().-]{6,}\d(?!\w)")
 
@@ -55,8 +59,20 @@ def _complete(items: list[ItemDTO]) -> bool:
     return len(cats) >= 2 and ("dress" in cats or {"top", "bottom"} <= cats)
 
 
+def _avoided(item: ItemDTO, intent: IntentDTO | None) -> bool:
+    if intent is None:
+        return False
+    return (
+        item.category in intent.avoid_categories
+        or item.pattern in intent.avoid_patterns
+        or bool(set(item.colors) & set(intent.avoid_colors))
+    )
+
+
 def _passes(item: ItemDTO, rule: str, season: str, feels: float | None, window: tuple[int, int],
-            limits: ContextLimits) -> bool:
+            limits: ContextLimits, intent: IntentDTO | None = None) -> bool:
+    if rule == REQUEST_RULE:
+        return not _avoided(item, intent)
     if rule == "season":
         return not item.seasons or season in item.seasons
     if rule == "warmth":
@@ -72,7 +88,8 @@ def _passes(item: ItemDTO, rule: str, season: str, feels: float | None, window: 
 
 
 def prefilter(items: list[ItemDTO], occasion: str, weather: WeatherDTO | None, season: str,
-              limits: ContextLimits = DEFAULT_LIMITS) -> tuple[list[ItemDTO], tuple[str, ...]]:
+              limits: ContextLimits = DEFAULT_LIMITS, intent: IntentDTO | None = None,
+              ) -> tuple[list[ItemDTO], tuple[str, ...]]:
     """§6 step 1. Returns the kept items in final order and the filters that had to be relaxed."""
     active = [i for i in items if not i.archived]
     feels = None
@@ -81,9 +98,11 @@ def prefilter(items: list[ItemDTO], occasion: str, weather: WeatherDTO | None, s
     window = OCCASION_FORMALITY.get(occasion, (1, 5))
 
     rules = list(RELAX_ORDER)
+    if intent is not None and intent.has_avoids:
+        rules.append(REQUEST_RULE)
     relaxed: list[str] = []
     while True:
-        kept = [i for i in active if all(_passes(i, r, season, feels, window, limits) for r in rules)]
+        kept = [i for i in active if all(_passes(i, r, season, feels, window, limits, intent) for r in rules)]
         if _complete(kept) or not rules:
             break
         relaxed.append(rules.pop(0))  # season → warmth → formality
@@ -139,6 +158,25 @@ def style_lines(p: StyleProfileDTO) -> list[str]:
     return lines
 
 
+def request_line(intent: IntentDTO | None, avoids_relaxed: bool = False) -> str | None:
+    """The parsed request as one line. Avoided pieces are normally already filtered out; when the filter had
+    to be relaxed to keep an outfit possible, the model is told to steer clear of them instead."""
+    if intent is None:
+        return None
+    parts = []
+    if intent.brief:
+        parts.append(intent.brief)
+    if intent.include_categories or intent.include_colors:
+        parts.append("must use " + ", ".join([*intent.include_categories, *intent.include_colors]))
+    if intent.wants_outerwear is True:
+        parts.append("add outerwear")
+    elif intent.wants_outerwear is False:
+        parts.append("no outerwear")
+    if avoids_relaxed and intent.has_avoids:
+        parts.append("avoid " + ", ".join([*intent.avoid_categories, *intent.avoid_colors, *intent.avoid_patterns]))
+    return "REQUEST: " + "; ".join(parts) if parts else None
+
+
 def feedback_line(events: list[FeedbackDTO], limit: int) -> str | None:
     shown = [e for e in events if e.pieces][:limit]
     if not shown:
@@ -166,12 +204,14 @@ def build_suggest_context(
     if intent is not None and intent.occasion:
         occasion = intent.occasion
     season = season_of(today, southern_hemisphere)
-    kept, relaxed = prefilter(items, occasion, weather, season, limits)
+    kept, relaxed = prefilter(items, occasion, weather, season, limits, intent)
     index = {i: item.id for i, item in enumerate(kept)}
     position = {item_id: i for i, item_id in index.items()}
 
     note = mask_pii(note.strip()[: limits.note_chars])
     lines = [f"OCCASION: {occasion}" + (f" — user note: {note}" if note else ""), weather_line(weather, season)]
+    if req := request_line(intent, REQUEST_RULE in relaxed):
+        lines.append(req)
     lines += style_lines(profile)
     if summary:
         lines.append(f"TASTE SUMMARY: {summary}")
@@ -189,3 +229,25 @@ def build_suggest_context(
         items_dropped_count=len(items) - len(kept), relaxed=relaxed, season=season,
         estimated_tokens=len(text) // 4,
     )
+
+
+def build_capsule_context(capsule, lang: str) -> CapsuleContext:
+    """What the model sees when explaining a deterministic capsule (ai.analysis.Capsule): the pieces under
+    their numbers, the occasions and season, the outfit count and the gaps. No user text, no ids."""
+    items = list(capsule.items)
+    lines = [
+        f"CAPSULE for {', '.join(capsule.occasions)} ({capsule.season}): {len(items)} pieces, "
+        f"{capsule.outfits_possible} wearable outfits",
+    ]
+    if capsule.gaps:
+        wanted = [g.category for g in capsule.gaps if g.category and g.code != "orphan_items"]
+        if wanted:
+            lines.append("MISSING (would add the most outfits): " + ", ".join(dict.fromkeys(wanted)))
+    lines.append("PIECES (id: category/type | attributes):")
+    lines += [item_line(i, item) for i, item in enumerate(items)]
+    if capsule.sample_outfits:
+        position = {item.id: i for i, item in enumerate(items)}
+        combos = [" + ".join(str(position[x]) for x in o if x in position) for o in capsule.sample_outfits[:6]]
+        lines.append("EXAMPLE OUTFITS (by id): " + "; ".join(combos))
+    text = "\n".join(lines)
+    return CapsuleContext(text=text, item_ids=tuple(i.id for i in items), estimated_tokens=len(text) // 4)

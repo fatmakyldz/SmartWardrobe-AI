@@ -57,7 +57,8 @@ Design: [`docs/AI-00-foundation.md`](docs/AI-00-foundation.md) — Claude primar
 - [x] AI-01 Quick fixes — `analyze` off the event loop, Today suggestions in the query cache, trusted proxy list, `MAX_ITEMS` in config, CLAUDE.md
 - [x] AI-02 Schema migration — `0002_ai_foundation` (new fields, ten tables, `item_ids` → `outfit_items`, ratings → `feedback_events`), Postgres + `alembic check` in CI
 - [x] AI-03 AI gateway + entitlements — `app/ai/` (Claude primary, Groq fallback, retries, telemetry), `app/entitlements/` (plans, daily budget, grants)
-- [ ] AI-04 Context + services — `app/services/` (only writer of business data), pure `ai/context.py` (§6 pre-filter, ordering, PII masking), rule-based taste summary, user outfits / edit / worn / style / vocab endpoints *(this PR)*
-- [ ] AI-05a Storage — private R2 bucket with 15-min presigned links, `wardrobe_images` lifecycle, shared demo pictures, `migrate_images_to_r2.py` / `cleanup_orphans.py`, owner-only `/images`, `0004_cleanup` written (deferred to AI-09)
-- [ ] AI-05b Auth — 15-min access + rotating refresh tokens (web: httpOnly cookie), email verification (Resend), password reset, app token flow, API at api.fomertech.com *(this PR)*
-- [ ] AI-06 … AI-09 — intelligence features, onboarding, entitlements UI, V1.0 hardening; scope and order in the design doc (§13)
+- [x] AI-04 Context + services — `app/services/` (only writer of business data), pure `ai/context.py` (§6 pre-filter, ordering, PII masking), rule-based taste summary, user outfits / edit / worn / style / vocab endpoints
+- [x] AI-05a Storage — private R2 bucket with 15-min presigned links, `wardrobe_images` lifecycle, shared demo pictures, `migrate_images_to_r2.py` / `cleanup_orphans.py`, owner-only `/images`, `0004_cleanup` written (deferred to AI-09)
+- [x] AI-05b Auth — 15-min access + rotating refresh tokens (web: httpOnly cookie), email verification (Resend), password reset, app token flow, API at api.fomertech.com
+- [ ] AI-06 Intelligence features — `POST /outfits/intent` and `SuggestIn.request` (free text → vocabulary values via `intent/v1`, hard avoid-filter in the context), `GET /items/analysis` (deterministic gaps: `ai/analysis.py`, no AI request, every plan), `POST /outfits/capsule` (deterministic capsule + `capsule_explain/v1`, premium feature; premium tier → mid model) *(this PR)*
+- [ ] AI-07 … AI-09 — onboarding/personalization (app), entitlements UI + usage, V1.0 hardening; scope and order in the design doc (§13)

@@ -1,19 +1,22 @@
 import hashlib
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, Header, Request, Response, UploadFile
 from sqlalchemy.orm import Session
 
+from ..ai import analysis
+from ..ai.context import season_of
 from ..ai.features import tagging
 from ..config import get_settings
 from ..db import get_db
 from ..entitlements import UserBudget, entitlements, require_feature
 from ..models import User
 from ..ratelimit import limiter
-from ..schemas import AnalyzeOut, ItemIn, ItemOut, ItemUpdate, Tags
+from ..schemas import AnalyzeOut, GapOut, ItemIn, ItemOut, ItemUpdate, Tags, WardrobeAnalysisOut
 from ..security import current_user, is_verified
 from ..serialize import item_out
-from ..services import images, wardrobe
+from ..services import images, orchestration, wardrobe
 from ..storage import get_storage
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -61,6 +64,21 @@ def create_item(body: ItemIn, user: User = Depends(current_user), db: Session = 
 @router.get("", response_model=list[ItemOut])
 def list_items(category: str | None = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
     return [item_out(i) for i in wardrobe.list_items(db, user, category)]
+
+
+@router.get("/analysis", response_model=WardrobeAnalysisOut)
+def wardrobe_analysis(lat: float | None = None, user: User = Depends(current_user)):
+    """What the wardrobe is missing (AI-06, deterministic: no AI request, every plan). `lat` only picks
+    the hemisphere for the season."""
+    inputs = orchestration.wardrobe_inputs(user, lat)
+    season = season_of(datetime.now(timezone.utc).date(), inputs.southern_hemisphere)
+    result = analysis.analyze(inputs.items, season)
+    return WardrobeAnalysisOut(
+        season=result.season, items=result.stats.items, per_category=result.stats.per_category,
+        outfits_possible=result.stats.outfits_possible, neutral_share=result.stats.neutral_share,
+        gaps=[GapOut(code=g.code, category=g.category, occasion=g.occasion, season=g.season, severity=g.severity,
+                     item_ids=list(g.item_ids)) for g in result.gaps],
+    )
 
 
 @router.patch("/{item_id}", response_model=ItemOut)
