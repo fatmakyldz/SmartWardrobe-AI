@@ -282,7 +282,7 @@ def _demo_with_outfit(client, monkeypatch):
     return h, outfit
 
 
-def test_suggest_writes_outfit_items_alongside_item_ids(client, monkeypatch):
+def test_suggest_writes_outfit_items_in_order(client, monkeypatch):
     import uuid
 
     from app.db import SessionLocal
@@ -293,7 +293,7 @@ def test_suggest_writes_outfit_items_alongside_item_ids(client, monkeypatch):
         o = db.get(Outfit, uuid.UUID(outfit["id"]))
         assert o.source == "ai"
         links = [(oi.position, str(oi.item_id), oi.slot) for oi in o.outfit_items]
-    # same items, same order as item_ids (which the response is still built from)
+    # same items, same order as the response
     assert links == [(n, i["id"], i["category"]) for n, i in enumerate(outfit["items"])]
 
 
@@ -333,7 +333,7 @@ def test_deleting_item_drops_its_outfit_items(client, monkeypatch):
         assert sorted(map(str, left)) == sorted(i["id"] for i in outfit["items"] if i["id"] != gone)
         assert db.scalar(select(func.count()).select_from(OutfitItem).where(OutfitItem.item_id == uuid.UUID(gone))) == 0
         assert db.scalar(select(func.count()).select_from(FeedbackEvent)) == 1
-    # the outfit is still served from item_ids, without the deleted piece (as before)
+    # the outfit is served without the deleted piece
     saved = client.get("/outfits", headers=h).json()[0]
     assert [i["id"] for i in saved["items"]] == [i["id"] for i in outfit["items"] if i["id"] != gone]
 
@@ -440,7 +440,8 @@ def test_cloudflare_proxy_setting(monkeypatch):
 
 def test_delete_account_removes_everything(client, monkeypatch):
     from app.db import SessionLocal
-    from app.models import FeedbackEvent, Item, Outfit, OutfitItem, StoredImage, User, WardrobeImage
+    from app.models import FeedbackEvent, Item, Outfit, OutfitItem, User, WardrobeImage
+    from app.storage import get_storage
 
     FAKE.respond = answer()
     token = client.post("/auth/demo", json={}).json()["access"]
@@ -453,7 +454,7 @@ def test_delete_account_removes_everything(client, monkeypatch):
         for model in (User, Item, Outfit, OutfitItem, FeedbackEvent):
             assert db.query(model).count() == 0, model.__tablename__
         # the shared demo pictures outlive every demo account
-        assert {i.key for i in db.query(StoredImage)} == {w.key for w in db.query(WardrobeImage)}
+        assert all(get_storage().exists(db, w.key) for w in db.query(WardrobeImage))
         assert db.query(WardrobeImage).count() == 17
         assert all(w.key.startswith("demo/") and w.user_id is None for w in db.query(WardrobeImage))
 

@@ -20,13 +20,9 @@ def item_out(item: Item) -> ItemOut:
     )
 
 
-def outfit_out(outfit: Outfit, items_by_id: dict[str, Item] | None = None) -> OutfitOut:
-    # outfit_items (position order) is the source; deleted pieces are already gone from it (ON DELETE
-    # CASCADE). item_ids is the fallback for rows written before 0002 that have no outfit_items.
-    if outfit.outfit_items:
-        items = [item_out(oi.item) for oi in sorted(outfit.outfit_items, key=lambda oi: oi.position)]
-    else:
-        items = [item_out(items_by_id[i]) for i in outfit.item_ids or [] if items_by_id and i in items_by_id]
+def outfit_out(outfit: Outfit) -> OutfitOut:
+    # outfit_items (position order) is the source; deleted pieces are already gone from it (ON DELETE CASCADE).
+    items = [item_out(oi.item) for oi in sorted(outfit.outfit_items, key=lambda oi: oi.position)]
     return OutfitOut(
         id=outfit.id,
         title=outfit.title,

@@ -9,6 +9,7 @@ if os.environ.get("TEST_DATABASE_URL"):
 else:
     _db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     os.environ["DATABASE_URL"] = f"sqlite:///{_db.name}"
+os.environ["LOCAL_STORAGE_DIR"] = tempfile.mkdtemp(prefix="sw-images-")
 os.environ["GROQ_API_KEY"] = "test-key"
 os.environ["ANTHROPIC_API_KEY"] = ""
 # Every model in the chain is the fake provider: two candidates per feature, so fallback is testable.

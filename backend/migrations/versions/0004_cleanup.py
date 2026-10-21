@@ -1,8 +1,9 @@
 """cleanup: drop the images blob table and outfits.item_ids (§2, §14 C9)
 
-NOT APPLIED YET — lives in migrations/deferred/ until AI-09; see the README there for the checklist.
-Data loss: photo bytes left in `images` and the JSON id lists in outfits.item_ids are gone for good;
-the downgrade only recreates empty structures.
+Applied in AI-09c, after the R2 migration was verified (22 Oct 2026) and the bucket had been live for a week.
+Refuses to run while an item has no wardrobe_images row or an outfit only has item_ids. Data loss: photo
+bytes left in `images` and the JSON id lists in outfits.item_ids are gone for good; the downgrade only
+recreates empty structures. Take a Neon branch/backup first.
 
 Revision ID: 0004_cleanup
 Revises: 0003_ai_estimate

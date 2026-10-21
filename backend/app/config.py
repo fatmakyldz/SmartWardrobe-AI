@@ -35,9 +35,10 @@ class Settings(BaseSettings):
     # Print full prompts to stderr. Local only: refused at startup unless the database is SQLite.
     ai_debug_log: bool = False
 
-    # Image storage: "db" keeps images in Postgres (local runs and tests);
-    # "s3" is a private S3-compatible bucket (Cloudflare R2) — production.
-    storage_backend: str = "db"
+    # Image storage: "local" keeps files under LOCAL_STORAGE_DIR (local runs and tests);
+    # "s3" is a private S3-compatible bucket (Cloudflare R2) — production. ("db", the pre-0004 value, means local.)
+    storage_backend: str = "local"
+    local_storage_dir: str = "./data/images"
     s3_endpoint_url: str = ""
     s3_bucket: str = ""
     s3_access_key_id: str = ""

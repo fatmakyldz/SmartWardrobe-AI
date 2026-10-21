@@ -1,15 +1,15 @@
-"""Image storage behind one small interface: Postgres (local / tests) or a private S3-compatible bucket (R2)."""
+"""Image storage behind one small interface: a local folder (local runs / tests) or a private S3-compatible bucket (R2)."""
 
+import mimetypes
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
 from typing import Protocol
 
-from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .models import StoredImage
 
 
 def cache_control() -> str:
@@ -28,36 +28,56 @@ class Storage(Protocol):
     def url(self, key: str) -> str: ...
 
 
-class DbStorage:
-    """Bytes in the `images` table, served by GET /images/{key} to the signed-in owner."""
+class LocalStorage:
+    """Files under LOCAL_STORAGE_DIR (local runs, tests), served by GET /images/{key} to the signed-in owner.
+    Keys are the same shape as in the bucket (u/{user}/{file}.webp, demo/{file}.webp)."""
+
+    def __init__(self, root: str | Path | None = None) -> None:
+        self.root = Path(root or get_settings().local_storage_dir).resolve()
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def _path(self, key: str) -> Path:
+        path = (self.root / key).resolve()
+        if not key or path == self.root or self.root not in path.parents:
+            raise ValueError(f"bad key {key!r}")
+        return path
 
     def put(self, db: Session, key: str, data: bytes, content_type: str) -> None:
-        db.merge(StoredImage(key=key, data=data, content_type=content_type))
+        path = self._path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_bytes(data)
+        tmp.replace(path)  # atomic: a reader never sees a half-written file
 
     def get(self, db: Session, key: str) -> tuple[bytes, str] | None:
-        img = db.get(StoredImage, key)
-        return (img.data, img.content_type) if img else None
+        path = self._path(key)
+        if not path.is_file():
+            return None
+        return path.read_bytes(), mimetypes.guess_type(path.name)[0] or "application/octet-stream"
 
     def exists(self, db: Session, key: str) -> bool:
-        return db.scalar(select(StoredImage.key).where(StoredImage.key == key)) is not None
+        return self._path(key).is_file()
 
     def copy(self, db: Session, src: str, dst: str) -> None:
-        img = db.get(StoredImage, src)
-        if img is None:
+        found = self.get(db, src)
+        if found is None:
             raise KeyError(src)
-        self.put(db, dst, img.data, img.content_type)
+        self.put(db, dst, found[0], found[1])
 
     def delete(self, db: Session, keys: list[str]) -> None:
-        if keys:
-            db.execute(delete(StoredImage).where(StoredImage.key.in_(keys)))
+        for key in keys:
+            path = self._path(key)
+            if path.is_file():
+                path.unlink()
 
     def delete_prefix(self, db: Session, prefix: str) -> None:
-        db.execute(delete(StoredImage).where(StoredImage.key.startswith(prefix)))
+        self.delete(db, [key for key, _ in self.list_keys(db, prefix)])
 
     def list_keys(self, db: Session, prefix: str = "") -> Iterator[tuple[str, datetime]]:
-        q = select(StoredImage.key, StoredImage.created_at).where(StoredImage.key.startswith(prefix))
-        for key, created in db.execute(q.order_by(StoredImage.key)):
-            yield key, created if created.tzinfo else created.replace(tzinfo=timezone.utc)
+        for path in sorted(p for p in self.root.rglob("*") if p.is_file() and p.suffix != ".tmp"):
+            key = path.relative_to(self.root).as_posix()
+            if key.startswith(prefix):
+                yield key, datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
 
     def url(self, key: str) -> str:
         base = get_settings().public_base_url.rstrip("/")
@@ -140,4 +160,4 @@ class S3Storage:
 
 @lru_cache
 def get_storage() -> Storage:
-    return S3Storage() if get_settings().storage_backend == "s3" else DbStorage()
+    return S3Storage() if get_settings().storage_backend == "s3" else LocalStorage()

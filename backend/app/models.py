@@ -111,7 +111,6 @@ class Outfit(Base):
     occasion: Mapped[str] = mapped_column(String(20))
     note: Mapped[str] = mapped_column(String(200), default="")
     weather: Mapped[dict] = mapped_column(JSON, default=dict)
-    item_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     title: Mapped[str] = mapped_column(String(120), default="")
     reason: Mapped[str] = mapped_column(Text, default="")
     lang: Mapped[str] = mapped_column(String(5), default="en")
@@ -126,21 +125,10 @@ class Outfit(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     user: Mapped[User] = relationship(back_populates="outfits")
-    # Written alongside item_ids; item_ids stays the read path until 0003_cleanup.
+    # The pieces of the outfit, in position order (the only source since 0004_cleanup).
     outfit_items: Mapped[list["OutfitItem"]] = relationship(
         back_populates="outfit", cascade="all, delete-orphan", passive_deletes=True, order_by="OutfitItem.position"
     )
-
-
-class StoredImage(Base):
-    """Image bytes when STORAGE_BACKEND=db."""
-
-    __tablename__ = "images"
-
-    key: Mapped[str] = mapped_column(String(120), primary_key=True)
-    content_type: Mapped[str] = mapped_column(String(40))
-    data: Mapped[bytes] = mapped_column(LargeBinary)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class OutfitItem(Base):

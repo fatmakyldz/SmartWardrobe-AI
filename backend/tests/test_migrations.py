@@ -143,7 +143,7 @@ def test_data_step_moves_item_ids_and_ratings(migrate):
         }
     assert "outfit_items" not in sa.inspect(engine).get_table_names()
 
-    migrate("upgrade", "head")
+    migrate("upgrade", "0003_ai_estimate")  # 0004 refuses items without wardrobe_images rows (tested below)
 
     links_t = _table("outfit_items", outfit_id=sa.Uuid, item_id=sa.Uuid)
     events_t = _table("feedback_events", id=sa.Uuid, user_id=sa.Uuid, outfit_id=sa.Uuid, item_id=sa.Uuid, created_at=TS)
@@ -199,28 +199,27 @@ def test_mark_existing_verified_script(migrate):
     assert _utc(marked["a@example.com"]) == created
 
 
-# ── 0004_cleanup: written in AI-05, applied in AI-09 ──────────────────────
+# ── 0004_cleanup (AI-09c) ─────────────────────────────────────────────────
 
-def test_cleanup_revision_is_deferred(migrate):
-    from alembic.script import ScriptDirectory
-
-    cfg = Config(str(BACKEND / "alembic.ini"))
-    cfg.set_main_option("script_location", str(BACKEND / "migrations"))
-    assert ScriptDirectory.from_config(cfg).get_current_head() == "0003_ai_estimate"  # head is untouched
-
-    # With the deferred folder added it upgrades and downgrades cleanly.
-    def run(cmd, rev):
-        c = Config(str(BACKEND / "alembic.ini"))
-        c.set_main_option("script_location", str(BACKEND / "migrations"))
-        folders = [str(BACKEND / "migrations" / d) for d in ("versions", "deferred")]
-        c.set_main_option("version_locations", os.pathsep.join(folders))  # path_separator = os
-        with engine.connect() as conn:
-            c.attributes["connection"] = conn
-            getattr(command, cmd)(c, rev)
-            conn.commit()
-
+def test_cleanup_drops_the_blob_table_and_item_ids_and_downgrades(migrate):
     migrate("upgrade", "head")
-    run("upgrade", "0004_cleanup")
     assert "images" not in sa.inspect(engine).get_table_names() and "item_ids" not in _columns("outfits")
-    run("downgrade", "0003_ai_estimate")
+    migrate("downgrade", "0003_ai_estimate")
     assert "images" in sa.inspect(engine).get_table_names() and "item_ids" in _columns("outfits")
+    migrate("upgrade", "head")
+
+
+def test_cleanup_refuses_while_an_item_has_no_wardrobe_images_row(migrate):
+    migrate("upgrade", "0003_ai_estimate")
+    items_t = _table("items", id=sa.Uuid, user_id=sa.Uuid, created_at=TS)
+    users_t = _table("users", id=sa.Uuid, created_at=TS)
+    me, now = uuid.uuid4(), datetime.now(timezone.utc)
+    with engine.begin() as conn:
+        conn.execute(users_t.insert().values(id=me, email="x@example.com", password_hash="x", name="", locale="en", city="",
+                                             is_demo=False, created_at=now, updated_at=now, token_version=0, plan="free"))
+        conn.execute(items_t.insert().values(id=uuid.uuid4(), user_id=me, image_key=f"u/{me.hex}/a.webp", name="", category="top",
+                                             subcategory="", colors=[], pattern="solid", warmth=3, formality=2, seasons=[],
+                                             created_at=now, updated_at=now, brand="", material="", is_favorite=False, wear_count=0))
+    with pytest.raises(Exception, match="no wardrobe_images row"):
+        migrate("upgrade", "0004_cleanup")
+    assert "images" in sa.inspect(engine).get_table_names()

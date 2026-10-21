@@ -111,7 +111,7 @@ def export_account(db: Session, user: User, now: datetime | None = None) -> dict
                 "id": str(o.id), "title": o.title, "reason": o.reason, "occasion": o.occasion, "note": o.note,
                 "weather": o.weather or {}, "source": o.source, "rating": o.rating, "lang": o.lang,
                 "worn_at": _iso(o.worn_at), "created_at": _iso(o.created_at),
-                "item_ids": [str(oi.item_id) for oi in sorted(o.outfit_items, key=lambda oi: oi.position)] or list(o.item_ids or []),
+                "item_ids": [str(oi.item_id) for oi in sorted(o.outfit_items, key=lambda oi: oi.position)],
             }
             for o in outfits
         ],
@@ -198,14 +198,8 @@ def update_style(db: Session, user: User, patch: dict) -> dict:
 # ── taste summary ─────────────────────────────────────────────────────────
 
 def outfit_items(db: Session, outfit: Outfit) -> list[Item]:
-    """Current pieces of an outfit: outfit_items, or item_ids for rows written before 0002."""
-    if outfit.outfit_items:
-        return [oi.item for oi in outfit.outfit_items]
-    ids = [i for i in (outfit.item_ids or [])]
-    if not ids:
-        return []
-    by_id = {str(i.id): i for i in db.scalars(select(Item).where(Item.user_id == outfit.user_id))}
-    return [by_id[i] for i in ids if i in by_id]
+    """Current pieces of an outfit, in position order."""
+    return [oi.item for oi in sorted(outfit.outfit_items, key=lambda oi: oi.position)]
 
 
 def _join(words: list[str], lang: str) -> str:

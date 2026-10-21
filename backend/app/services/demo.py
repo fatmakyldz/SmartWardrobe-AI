@@ -112,7 +112,6 @@ def claim_demo(db: Session, demo: User, user: User, keep_items: bool) -> dict:
 
         for outfit in list(demo.outfits):
             outfit.user_id = user.id
-            outfit.item_ids = [str(id_map[i]) for i in (outfit.item_ids or []) if i in id_map]
             for oi in list(outfit.outfit_items):
                 if str(oi.item_id) in id_map:
                     oi.item_id = id_map[str(oi.item_id)]

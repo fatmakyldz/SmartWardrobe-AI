@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 *.db
 .env
+backend/data/
 
 # Node / Expo
 node_modules/

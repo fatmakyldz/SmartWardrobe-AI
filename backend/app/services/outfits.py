@@ -56,7 +56,6 @@ def _own_items(db: Session, user: User, item_ids: list[uuid.UUID]) -> list[Item]
 
 
 def _set_items(db: Session, outfit: Outfit, items: list[Item]) -> None:
-    outfit.item_ids = [str(i.id) for i in items]  # kept in step until 0003_cleanup drops it
     outfit.outfit_items.clear()
     db.flush()  # delete the old rows before inserting new ones with the same (outfit_id, item_id)
     outfit.outfit_items.extend(OutfitItem(item=i, position=n, slot=i.category) for n, i in enumerate(items))
@@ -79,7 +78,7 @@ def save_suggestions(db: Session, user: User, suggestions: list[NewOutfit], *, o
         items = _own_items(db, user, sug.item_ids)
         outfit = Outfit(user_id=user.id, occasion=occasion, note=note, weather=weather or {}, title=sug.title,
                         reason=sug.reason, lang=lang, source="ai", prompt_version=prompt_version,
-                        ai_request_id=ai_request_id, item_ids=[str(i.id) for i in items],
+                        ai_request_id=ai_request_id,
                         outfit_items=[OutfitItem(item=i, position=n, slot=i.category) for n, i in enumerate(items)])
         db.add(outfit)
         saved.append(outfit)
@@ -91,7 +90,7 @@ def create_user_outfit(db: Session, user: User, item_ids: list[uuid.UUID], occas
                        lang: str) -> Outfit:
     items = _checked_items(db, user, item_ids)
     outfit = Outfit(user_id=user.id, occasion=occasion, note="", weather={}, title=title.strip(), reason="",
-                    lang=lang, source="user", item_ids=[str(i.id) for i in items],
+                    lang=lang, source="user",
                     outfit_items=[OutfitItem(item=i, position=n, slot=i.category) for n, i in enumerate(items)])
     db.add(outfit)
     db.commit()
