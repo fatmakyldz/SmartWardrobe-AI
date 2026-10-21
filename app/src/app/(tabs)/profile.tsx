@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useErrorText } from '@/lib/errors';
 import { Lang, useI18n } from '@/lib/i18n';
+import { LANG_LABELS, SUPPORTED_LANGS } from '@/lib/langs';
 import { space, usePalette } from '@/lib/theme';
 
 const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://fomertech.com';
@@ -102,8 +103,9 @@ export default function Profile() {
       <View style={{ marginTop: space.xxl, gap: space.md }}>
         <T variant="heading">{t.profile.language}</T>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
-          <Chip label="English" selected={lang === 'en'} onPress={() => changeLang('en')} />
-          <Chip label="Türkçe" selected={lang === 'tr'} onPress={() => changeLang('tr')} />
+          {SUPPORTED_LANGS.map((l) => (
+            <Chip key={l} label={LANG_LABELS[l]} selected={lang === l} onPress={() => changeLang(l)} />
+          ))}
         </View>
       </View>
 

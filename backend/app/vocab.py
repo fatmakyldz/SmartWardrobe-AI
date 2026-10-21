@@ -13,7 +13,37 @@ SEASONS = ["spring", "summer", "autumn", "winter"]
 
 OCCASIONS = ["casual", "work", "formal", "date", "sport", "party", "travel"]
 
+# Languages the product speaks. Adding one means: a name here (the prompts take the name), the app
+# dictionary, the summary templates (services/profile.py), the e-mail templates (services/email.py),
+# the demo piece names (services/demo.py) and the store listing. English is the fallback everywhere.
+# Languages the product speaks. Adding one means: a name here (the prompts take the name), the app
+# dictionary, the summary templates (services/profile.py), the e-mail templates (services/email.py),
+# the demo piece names (services/demo.py) and the store listing. English is the fallback everywhere.
+# Languages the product speaks. Adding one means: a name here (the prompts take the name), the app
+# dictionary, the summary templates (services/profile.py), the e-mail templates (services/email.py),
+# the demo piece names (services/demo.py) and the store listing. English is the fallback everywhere.
 LANGS = ["en", "tr"]
+LANG_NAME = {"en": "English", "tr": "Turkish"}  # as the prompts say it
+
+
+def normalize_lang(value) -> str:
+    """A supported language code, or English for anything else (None, "TR", "de", "tr-TR")."""
+    code = str(value or "").strip().lower().split("-")[0]
+    return code if code in LANGS else "en"
+LANG_NAME = {"en": "English", "tr": "Turkish"}  # as the prompts say it
+
+
+def normalize_lang(value) -> str:
+    """A supported language code, or English for anything else (None, "TR", "de", "tr-TR")."""
+    code = str(value or "").strip().lower().split("-")[0]
+    return code if code in LANGS else "en"
+LANG_NAME = {"en": "English", "tr": "Turkish"}  # as the prompts say it
+
+
+def normalize_lang(value) -> str:
+    """A supported language code, or English for anything else (None, "TR", "de", "tr-TR")."""
+    code = str(value or "").strip().lower().split("-")[0]
+    return code if code in LANGS else "en"
 
 
 def clamp_int(value, lo: int, hi: int, default: int) -> int:

@@ -2,12 +2,11 @@
 
 import uuid
 
-from ...vocab import CATEGORIES, COLORS, PATTERNS, SEASONS
+from ...vocab import CATEGORIES, COLORS, LANG_NAME, PATTERNS, SEASONS
 from ..gateway import AIRequest, AIResponse, BudgetGate, complete
 from ..providers import ImagePart, TextPart
 from ..schemas import TaggingOut
 
-LANG_NAME = {"en": "English", "tr": "Turkish"}
 PROMPT_VERSION = "v2"  # v1 + confidence / uncertain fields
 
 

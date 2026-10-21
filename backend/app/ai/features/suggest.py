@@ -8,12 +8,13 @@ import uuid
 from dataclasses import dataclass
 
 from ...outfit_rules import complete_outfit
+from ...vocab import LANG_NAME
+from ...vocab import LANG_NAME
 from ..gateway import AIRequest, AIResponse, BudgetGate, complete
 from ..providers import TextPart
 from ..schemas import SuggestOut
 from ..schemas.context import ItemDTO, SuggestContext
 
-LANG_NAME = {"en": "English", "tr": "Turkish"}
 PROMPT_VERSION = "v2"  # v1 system text, §6 context
 
 

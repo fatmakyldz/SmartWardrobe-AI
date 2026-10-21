@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
 
+import { Lang } from './langs';
+
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 
 export type Category = 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'accessory' | 'bag';
@@ -44,7 +46,7 @@ export type User = {
   id: string;
   email: string;
   name: string;
-  locale: 'en' | 'tr';
+  locale: Lang;
   city: string;
   lat: number | null;
   lon: number | null;

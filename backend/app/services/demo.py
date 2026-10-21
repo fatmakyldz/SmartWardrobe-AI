@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..models import FeedbackEvent, Item, Outfit, OutfitItem, User
 from ..security import hash_password
+from ..vocab import normalize_lang
 from .images import copy_shared_image, demo_key, ensure_demo_images
 from .profile import delete_account, update_style
 
@@ -47,7 +48,7 @@ def create_demo_user(db: Session, locale: str, style_profile: dict | None = None
         email=f"demo-{uuid.uuid4().hex[:12]}@demo.example.com",
         password_hash=hash_password(secrets.token_urlsafe(24)),  # unusable; demo users can't log in
         name="Demo",
-        locale=locale,
+        locale=normalize_lang(locale),
         city=DEMO_CITY.get(locale, "Istanbul"),
         lat=DEMO_LAT,
         lon=DEMO_LON,
@@ -62,7 +63,7 @@ def create_demo_user(db: Session, locale: str, style_profile: dict | None = None
             Item(
                 user_id=user.id,
                 image_key=demo_key(file),
-                name=name_tr if locale == "tr" else name_en,
+                name=name_tr if normalize_lang(locale) == "tr" else name_en,  # names are EN/TR only; others get EN
                 category=cat,
                 subcategory=sub,
                 colors=colors,

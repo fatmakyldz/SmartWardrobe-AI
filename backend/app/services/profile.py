@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..models import FeedbackEvent, Item, Outfit, RefreshToken, User
 from ..security import hash_password
+from ..vocab import normalize_lang
 from . import images
 
 SUMMARY_EVERY_EVENTS = 10
@@ -134,7 +135,7 @@ def outfit_items(db: Session, outfit: Outfit) -> list[Item]:
 def _join(words: list[str], lang: str) -> str:
     if len(words) <= 1:
         return "".join(words)
-    return f"{', '.join(words[:-1])} {'ve' if lang == 'tr' else 'and'} {words[-1]}"
+    return f"{', '.join(words[:-1])} {'ve' if normalize_lang(lang) == 'tr' else 'and'} {words[-1]}"
 
 
 WORN_WEIGHT = 2  # wearing an outfit says more than liking it
@@ -155,7 +156,7 @@ def build_summary(liked: list[list[Item]], disliked: list[list[Item]], lang: str
     worn = worn or []
     if not liked and not disliked and not worn:
         return None
-    tr = lang == "tr"
+    tr = normalize_lang(lang) == "tr"  # templates exist in EN and TR; any other language reads the EN ones
     color = (lambda c: COLOR_TR.get(c, c)) if tr else (lambda c: c)
     pattern = (lambda x: PATTERN_TR.get(x, x)) if tr else (lambda x: x)
 

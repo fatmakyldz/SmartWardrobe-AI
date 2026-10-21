@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import httpx
 
 from ..config import get_settings
+from ..vocab import normalize_lang
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ OUTBOX: list[Message] = []
 
 
 def render(template: str, lang: str, link: str, app_link: str, name: str = "") -> tuple[str, str, str]:
-    lang = "tr" if lang == "tr" else "en"
+    lang = normalize_lang(lang)
     subject, intro, button, footer = TEMPLATES[template][lang]
     intro = intro.format(name=f" {name}" if name else "")
     in_app = OPEN_IN_APP[lang].format(app_link=app_link)

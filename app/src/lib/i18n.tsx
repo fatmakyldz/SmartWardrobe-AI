@@ -3,7 +3,9 @@ import { createContext, ReactNode, useCallback, useContext, useMemo, useState } 
 
 import { APP_NAME } from './brand';
 
-export type Lang = 'en' | 'tr';
+import { DEFAULT_LANG, isLang, Lang } from './langs';
+
+export type { Lang } from './langs';
 
 // EN: "a top", "shoes" — category labels with the article they take mid-sentence.
 const withArticle = (label: string): string =>
@@ -608,9 +610,11 @@ const tr: Dict = {
   },
 };
 
+// Every supported language needs an entry; `Record<Lang, Dict>` makes a missing one a type error.
 const dicts: Record<Lang, Dict> = { en, tr };
 
 // Turkish locative suffix with vowel harmony and consonant assimilation: İstanbul'da, İzmir'de, Kars'ta.
+// Locale-specific helpers live beside the dictionary that uses them (this one only in the TR texts).
 export function locativeTr(word: string): string {
   const lower = word.toLocaleLowerCase('tr');
   const vowels = [...lower].filter((c) => 'aeıioöuü'.includes(c));
@@ -620,9 +624,12 @@ export function locativeTr(word: string): string {
   return `${word}'${hard ? 't' : 'd'}${front ? 'e' : 'a'}`;
 }
 
+/** The first device language the app speaks (a TR-then-EN phone gets Turkish, an EN-then-TR one English). */
 export function deviceLang(): Lang {
-  const code = getLocales()[0]?.languageCode;
-  return code === 'tr' ? 'tr' : 'en';
+  for (const l of getLocales()) {
+    if (isLang(l.languageCode)) return l.languageCode;
+  }
+  return DEFAULT_LANG;
 }
 
 type Ctx = { lang: Lang; t: Dict; setLang: (l: Lang) => void };
