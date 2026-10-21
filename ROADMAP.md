@@ -48,7 +48,7 @@ The original code is preserved on the [`legacy-streamlit`](https://github.com/fa
 - [ ] App icon, splash, store screenshots
 - [x] Privacy policy page (photos, account data, AI processing) — in the app at `/privacy` (EN/TR); `wardrobe.fomertech.com/privacy` is the public URL for the stores
 - [ ] EAS builds → TestFlight + Google Play internal testing
-- [ ] Store listings (EN/TR) and review submission
+- [ ] Store listings (EN/TR) and review submission — privacy-form answers (App Privacy / Data safety), permissions and review notes in `docs/store/privacy-forms.md`; listing texts wait for the name
 
 ### Phase AI — AI foundation
 Design: [`docs/AI-00-foundation.md`](docs/AI-00-foundation.md) — Claude primary + Groq fallback, AI gateway, entitlements (Free 50 items / 5 suggestions a day, Premium 300), private R2 storage, email auth with refresh tokens, onboarding. Each phase is one PR: tests → report → review → merge.
