@@ -39,8 +39,8 @@ The original code is preserved on the [`legacy-streamlit`](https://github.com/fa
 - [ ] Final product name (one constant in `app/src/lib/brand.ts`)
 
 ### Phase 3 — Go live (web)
-- [ ] Neon project, Hugging Face Space `smartwardrobe-api`, secrets
-- [ ] Web build on Vercel → `wardrobe.fomertech.com`, CORS
+- [x] Neon project, Hugging Face Space `smartwardrobe-api`, secrets
+- [x] Web build on Vercel → `wardrobe.fomertech.com`, CORS (at the edge, `api.fomertech.com` Worker)
 - [ ] Fomer site card → Live
 - [ ] Deploy sonrası /auth/demo rate limitinin kullanıcı başına çalıştığını doğrula; gerekirse TRUSTED_PROXY_HOSTS'u Space proxy adresiyle güncelle
 
@@ -70,5 +70,5 @@ Design: [`docs/AI-00-foundation.md`](docs/AI-00-foundation.md) — Claude primar
 - [ ] AI-08 Entitlements UI + usage — `GET /me/entitlements` (plan, limits, features, today's usage, what verifying unlocks); Today shows suggestions left, Profile shows the plan card, limit and verify messages take their numbers from the API; feature gating (`user_outfits`, `capsule`) replaces `is_demo` checks; `reconcile_usage.py` rebuilds `usage_counters` from `ai_requests` *(this PR)*
 - [ ] AI-09a Hardening — `GET /me/export` (data portability) + “Download my data” in Profile, privacy policy page (`/privacy`, linked from Profile and sign-up), `ai_requests.subject_id` anonymised after 90 days (`cleanup_orphans.py`, now scheduled weekly by `cleanup.yml`), uptime note *(this PR)*
 - [x] AI-09b Error tracking — Sentry on both sides, off until a DSN is set: backend `sentry-sdk[fastapi]` (`observability.py`, 5xx only, PII stripped), app `@sentry/react-native` (`lib/observability.ts`, `expoRouterIntegration`, `Sentry.wrap`, ErrorBoundary capture, Metro config for debug ids, Expo plugin for source-map upload)
-- [ ] AI-09c Cleanup migration — `0004_cleanup` ≥ 1 week after the R2 migration is verified (§14 C9); the other §2 retention rows (`usage_counters` after 400 days, expired `refresh_tokens` after 30 days) and the `ai_requests` 13-month roll-up (due from Nov 2027)
+- [ ] AI-09c Cleanup migration — **R2 migration verified and `STORAGE_BACKEND=s3` live since 22 Oct 2026** (73 images, `--verify` OK) → `0004_cleanup` not before **29 Oct 2026**, after a Neon branch/backup (§14 C9); the other §2 retention rows (`usage_counters` after 400 days, expired `refresh_tokens` after 30 days) and the `ai_requests` 13-month roll-up (due from Nov 2027)
 - [ ] Store metadata, brand/bundle id, builds — see Phase 4
