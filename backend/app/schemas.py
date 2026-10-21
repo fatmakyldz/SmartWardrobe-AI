@@ -14,6 +14,10 @@ class RegisterIn(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     name: str = Field(default="", max_length=80)
     locale: Lang = "en"
+    # "Set up my own wardrobe" after trying the demo: the demo account's access token. Its style profile
+    # moves over; with keep_demo_items its 17 pieces (own copies), outfits and feedback come too (§10).
+    claim_demo_token: str | None = Field(default=None, max_length=2000)
+    keep_demo_items: bool = False
 
 
 class LoginIn(BaseModel):
@@ -23,11 +27,13 @@ class LoginIn(BaseModel):
 
 class DemoIn(BaseModel):
     locale: Lang = "en"
+    style_profile: "StyleIn | None" = None  # onboarding answers (§10 step 1), fixed vocabularies only
 
 
 class AuthOut(BaseModel):
     access: str  # 15-minute JWT
     refresh: str | None  # 30 days, single use; None on the web, where it is set as an httpOnly cookie
+    claimed: dict | None = None  # register with claim_demo_token: what moved over from the demo account
     user: "UserOut"
 
 
@@ -291,3 +297,4 @@ class VocabOut(BaseModel):
 
 
 AuthOut.model_rebuild()
+DemoIn.model_rebuild()

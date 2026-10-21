@@ -1,13 +1,9 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, Notice, Screen, T } from '@/components/ui';
-import { api } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
+import { Button, Screen, T } from '@/components/ui';
 import { APP_NAME } from '@/lib/brand';
-import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
 import { radius, space, type, usePalette } from '@/lib/theme';
 
@@ -21,23 +17,7 @@ const PREVIEW = [
 
 export default function Welcome() {
   const p = usePalette();
-  const { t, lang } = useI18n();
-  const { signIn } = useAuth();
-  const errorText = useErrorText();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function tryDemo() {
-    setBusy(true);
-    setError(null);
-    try {
-      await signIn(await api.demo(lang));
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { t } = useI18n();
 
   return (
     <Screen edges={['top', 'bottom']}>
@@ -68,8 +48,7 @@ export default function Welcome() {
       </View>
 
       <View style={{ gap: space.md, marginTop: space.xxl }}>
-        {error ? <Notice tone="error">{error}</Notice> : null}
-        <Button label={t.welcome.demo} onPress={tryDemo} loading={busy} />
+        <Button label={t.welcome.demo} onPress={() => router.push('/onboarding')} />
         <T variant="small" color="muted" style={{ textAlign: 'center' }}>
           {t.welcome.demoNote}
         </T>

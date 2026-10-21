@@ -65,12 +65,15 @@ function Root() {
         <Stack.Screen name="auth/reset" />
         <Stack.Protected guard={!user}>
           <Stack.Screen name="welcome" />
+          <Stack.Screen name="onboarding" />
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="sign-up" />
           <Stack.Screen name="forgot" />
         </Stack.Protected>
         <Stack.Protected guard={!!user}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="claim" />
+          <Stack.Screen name="style" options={{ presentation: 'modal' }} />
           <Stack.Screen name="item/new" options={{ presentation: 'modal' }} />
           <Stack.Screen name="item/[id]" options={{ presentation: 'modal' }} />
         </Stack.Protected>

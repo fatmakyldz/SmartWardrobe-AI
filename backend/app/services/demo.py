@@ -8,10 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Item, User
+from ..models import FeedbackEvent, Item, Outfit, OutfitItem, User
 from ..security import hash_password
-from .images import demo_key, ensure_demo_images
-from .profile import delete_account
+from .images import copy_shared_image, demo_key, ensure_demo_images
+from .profile import delete_account, update_style
 
 # file, category, subcategory, colors, pattern, warmth, formality, seasons, name en, name tr
 ALL = ["spring", "summer", "autumn", "winter"]
@@ -40,7 +40,7 @@ DEMO_CITY = {"en": "Istanbul", "tr": "İstanbul"}
 DEMO_LAT, DEMO_LON = 41.0082, 28.9784
 
 
-def create_demo_user(db: Session, locale: str) -> User:
+def create_demo_user(db: Session, locale: str, style_profile: dict | None = None) -> User:
     # The 17 pictures are shared by every demo account (§14 C5): uploaded once, never copied per visitor.
     ensure_demo_images(db, [row[0] for row in DEMO_ITEMS])
     user = User(
@@ -73,7 +73,59 @@ def create_demo_user(db: Session, locale: str) -> User:
             )
         )
     db.commit()
+    if style_profile:
+        update_style(db, user, style_profile)  # onboarding answers given before the account existed (§10 step 1)
     return user
+
+
+def claim_demo(db: Session, demo: User, user: User, keep_items: bool) -> dict:
+    """"Set up my own wardrobe": the demo account's style profile, outfits and feedback move to the new
+    account (§10 step 4). The outfits are made of demo pieces, so they come along only with keep_items,
+    which copies the 17 pieces (each with its own picture, decision 15); otherwise only the profile moves.
+    The demo account is deleted at the end. Returns what moved, for the response."""
+    if not demo.is_demo:
+        raise ValueError("not a demo account")
+    moved = {"style_profile": False, "items": 0, "outfits": 0, "feedback_events": 0}
+    if demo.style_profile:
+        user.style_profile = dict(demo.style_profile)
+        user.style_summary, user.style_summary_at = demo.style_summary, demo.style_summary_at
+        moved["style_profile"] = True
+
+    if keep_items:
+        id_map: dict[str, uuid.UUID] = {}
+        for src in list(demo.items):
+            copy = Item(
+                user_id=user.id, image_key=src.image_key, name=src.name, category=src.category,
+                subcategory=src.subcategory, colors=list(src.colors or []), pattern=src.pattern, warmth=src.warmth,
+                formality=src.formality, seasons=list(src.seasons or []), is_favorite=src.is_favorite,
+                wear_count=src.wear_count, last_worn_at=src.last_worn_at,
+            )
+            db.add(copy)
+            db.flush()
+            copy_shared_image(db, user, copy)
+            id_map[str(src.id)] = copy.id
+        moved["items"] = len(id_map)
+
+        for outfit in list(demo.outfits):
+            outfit.user_id = user.id
+            outfit.item_ids = [str(id_map[i]) for i in (outfit.item_ids or []) if i in id_map]
+            for oi in list(outfit.outfit_items):
+                if str(oi.item_id) in id_map:
+                    oi.item_id = id_map[str(oi.item_id)]
+                else:
+                    db.delete(oi)
+            moved["outfits"] += 1
+        events = db.scalars(select(FeedbackEvent).where(FeedbackEvent.user_id == demo.id)).all()
+        for e in events:
+            e.user_id = user.id
+            e.item_id = id_map.get(str(e.item_id)) if e.item_id else None
+        moved["feedback_events"] = len(events)
+        db.flush()
+
+    db.commit()
+    db.expire(demo)  # its item/outfit collections now belong to `user`; reload before the cascade delete
+    delete_account(db, demo)
+    return moved
 
 
 def cleanup_expired_demos(db: Session) -> int:

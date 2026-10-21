@@ -69,15 +69,14 @@ export default function Profile() {
       {user.is_demo ? (
         <View style={{ marginTop: space.xl, gap: space.md }}>
           <Notice>{t.profile.demoBanner}</Notice>
-          <Button
-            label={t.profile.createReal}
-            onPress={async () => {
-              await signOut();
-              router.push('/sign-up');
-            }}
-          />
+          <Button label={t.profile.createReal} onPress={() => router.push('/claim')} />
         </View>
       ) : null}
+
+      <View style={{ marginTop: space.xxl, gap: space.md }}>
+        <T variant="heading">{t.style.title}</T>
+        <Button label={t.profile.stylePrefs} kind="secondary" onPress={() => router.push('/style')} />
+      </View>
 
       <View style={{ marginTop: space.xxl, gap: space.md }}>
         <T variant="heading">{t.profile.city}</T>

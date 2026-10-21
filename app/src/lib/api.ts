@@ -14,6 +14,24 @@ export const COLORS = [
 export const PATTERNS = ['solid', 'striped', 'checked', 'floral', 'printed', 'denim', 'knit', 'leather', 'other'] as const;
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter'] as const;
 
+// Onboarding answers and explicit style preferences: fixed vocabularies, like the backend's vocab.py.
+export const STYLES = ['minimal', 'classic', 'casual', 'bold', 'sporty', 'romantic', 'streetwear', 'boho'] as const;
+export const PALETTES = ['neutral', 'dark', 'vivid', 'pastel'] as const;
+export const PRIORITIES = ['comfort', 'elegance', 'weather', 'variety'] as const;
+export type Style = (typeof STYLES)[number];
+export type Palette = (typeof PALETTES)[number];
+export type Priority = (typeof PRIORITIES)[number];
+export type StyleAnswers = { q1?: Style | null; q2?: Palette[] | null; q3?: Priority | null };
+export type StyleProfile = {
+  answers: StyleAnswers;
+  liked_colors: string[];
+  disliked_colors: string[];
+  styles: string[];
+  avoid: string[];
+  summary: string | null;
+};
+export type StylePatch = Partial<Omit<StyleProfile, 'summary'>>;
+
 // Swatch colours for the colour picker.
 export const SWATCH: Record<string, string> = {
   black: '#1d1d1f', white: '#fbfbf8', grey: '#9b9da3', navy: '#273452', blue: '#4f6f99', lightblue: '#b9d0e8',
@@ -89,6 +107,11 @@ let token: string | null = null;
 let refreshToken: string | null = null;
 let onUnauthorized: (() => void) | null = null;
 let onRefreshed: ((s: Session) => void) | null = null;
+
+/** The current access token, for a request body that must carry it (claiming a demo account). */
+export function accessToken(): string | null {
+  return token;
+}
 
 export function setSession(s: { access: string | null; refresh: string | null }) {
   token = s.access;
@@ -190,10 +213,17 @@ const json = (method: string, body?: unknown): RequestInit => ({ method, body: b
 export type PickedImage = { uri: string; mimeType?: string | null; fileName?: string | null; file?: File };
 
 export const api = {
-  register: (b: { email: string; password: string; name: string; locale: string }) =>
-    request<Session>('/auth/register', json('POST', b)),
+  register: (b: {
+    email: string;
+    password: string;
+    name: string;
+    locale: string;
+    claim_demo_token?: string;
+    keep_demo_items?: boolean;
+  }) => request<Session & { claimed: Record<string, number | boolean> | null }>('/auth/register', json('POST', b)),
   login: (b: { email: string; password: string }) => request<Session>('/auth/login', json('POST', b)),
-  demo: (locale: string) => request<Session>('/auth/demo', json('POST', { locale })),
+  demo: (locale: string, style_profile?: StylePatch) =>
+    request<Session>('/auth/demo', json('POST', style_profile ? { locale, style_profile } : { locale })),
   logout: () => request<void>('/auth/logout', json('POST', WEB ? undefined : { refresh: refreshToken })),
   verifyEmail: (t: string) => request<User>('/auth/verify', json('POST', { token: t })),
   resendVerification: () => request<void>('/auth/resend-verification', { method: 'POST' }),
@@ -203,6 +233,8 @@ export const api = {
   me: () => request<User>('/me'),
   updateMe: (b: Partial<Pick<User, 'name' | 'locale' | 'city' | 'lat' | 'lon'>>) => request<User>('/me', json('PATCH', b)),
   deleteMe: () => request<void>('/me', { method: 'DELETE' }),
+  style: () => request<StyleProfile>('/me/style'),
+  updateStyle: (b: StylePatch) => request<StyleProfile>('/me/style', json('PATCH', b)),
 
   items: () => request<Item[]>('/items'),
   analyze: (img: PickedImage, lang: string) => {

@@ -44,6 +44,19 @@ def _unauthorized() -> HTTPException:
     )
 
 
+def user_from_access_token(db: Session, token: str) -> User | None:
+    """The user an access token stands for, or None when it is invalid, expired or signed out."""
+    try:
+        payload = jwt.decode(token, get_settings().secret_key, algorithms=[ALGORITHM],
+                             options={"require": ["exp", "sub", "tv"]})
+        user_id = uuid.UUID(payload["sub"])
+        version = int(payload["tv"])
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
+        return None
+    user = db.get(User, user_id)
+    return user if user is not None and user.token_version == version else None
+
+
 def current_user(
     request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
@@ -51,15 +64,8 @@ def current_user(
 ) -> User:
     if creds is None:
         raise _unauthorized()
-    try:
-        payload = jwt.decode(creds.credentials, get_settings().secret_key, algorithms=[ALGORITHM],
-                             options={"require": ["exp", "sub", "tv"]})
-        user_id = uuid.UUID(payload["sub"])
-        version = int(payload["tv"])
-    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
-        raise _unauthorized()
-    user = db.get(User, user_id)
-    if user is None or user.token_version != version:
+    user = user_from_access_token(db, creds.credentials)
+    if user is None:
         raise _unauthorized()
     # Lets the rate limiter key on the user instead of the IP.
     request.state.user_id = str(user.id)
