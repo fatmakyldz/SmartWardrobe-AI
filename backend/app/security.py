@@ -72,12 +72,5 @@ def current_user(
     return user
 
 
-def is_verified(user: User) -> bool:
-    """AI features need a verified email (§14 C3); demo accounts are exempt."""
-    return user.is_demo or user.email_verified_at is not None
-
-
-def verified_user(user: User = Depends(current_user)) -> User:
-    if not is_verified(user):
-        raise HTTPException(403, detail={"code": "email_unverified"})
-    return user
+# Since C3 (a′) no route is gated on a confirmed email: an unverified account runs on the small
+# `unverified` plan (entitlements), so routes gate on features and budgets instead.

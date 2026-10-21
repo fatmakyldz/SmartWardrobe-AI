@@ -28,7 +28,7 @@ from ..schemas import (
     SuggestOut,
     WeatherOut,
 )
-from ..security import current_user, verified_user
+from ..security import current_user
 from ..serialize import item_out, outfit_out
 from ..services import feedback as feedback_service
 from ..services import orchestration
@@ -52,7 +52,7 @@ def parse_intent(
     request: Request,
     body: IntentIn,
     idempotency_key: str | None = Header(default=None, max_length=100),
-    user: User = Depends(verified_user),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     """Free text → structured request, so the app can show what it understood before suggesting.
@@ -70,7 +70,7 @@ def suggest(
     request: Request,
     body: SuggestIn,
     idempotency_key: str | None = Header(default=None, max_length=100),
-    user: User = Depends(verified_user),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     ent = entitlements(user, db)
@@ -124,7 +124,7 @@ def capsule(
     request: Request,
     body: CapsuleIn,
     idempotency_key: str | None = Header(default=None, max_length=100),
-    user: User = Depends(verified_user),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     """A capsule from the user's own pieces for the given occasions and the current season: chosen

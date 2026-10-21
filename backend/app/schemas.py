@@ -92,7 +92,7 @@ class AnalyzeOut(BaseModel):
     image_url: str
     is_clothing: bool
     tags: Tags
-    ai_skipped: str | None = None  # "email_unverified": photo stored, tags left for the user
+    ai_skipped: str | None = None  # "budget_exceeded": photo stored, default tags for the user to fill in
 
 
 class ItemIn(Tags):

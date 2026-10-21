@@ -6,6 +6,7 @@ import { accessToken, api, ApiError, refreshSession } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
+import { clearPendingOnboarding, takePendingStyle } from '@/lib/onboarding';
 import { space, usePalette } from '@/lib/theme';
 
 import { CloseIcon } from './icons';
@@ -43,6 +44,14 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' | 'claim' }) {
       const res = isUp
         ? await api.register({ email: email.trim(), password, name: name.trim(), locale: lang, ...claim })
         : await api.login({ email: email.trim(), password });
+      if (isUp && !isClaim) {
+        // Onboarding answers given before the account existed; saved before signIn flips the guard,
+        // so the first suggestion already carries them. The first-pieces flag is consumed by index.tsx.
+        const pending = takePendingStyle();
+        if (pending) await api.updateStyle(pending).catch(() => undefined);
+      } else {
+        clearPendingOnboarding(); // sign-in or claim: whatever onboarding left behind is not for this account
+      }
       await signIn(res);
       if (isClaim) router.replace('/'); // still signed in, so the guard doesn't move us: go to Today
     } catch (e) {

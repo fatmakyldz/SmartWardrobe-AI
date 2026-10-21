@@ -1,6 +1,7 @@
 """AI summary from ai_requests / ai_request_attempts: cost, tokens and latency by feature,
 fallback / error / budget rates, failures by provider, and how the budget's input estimate compares
-with the real input tokens. Read-only.
+with the real input tokens. Plus onboarding: time to first outfit (sign-up → first AI outfit) and
+unverified → verified conversion for the accounts registered in the period. Read-only.
 
     python scripts/ai_report.py                          # yesterday (UTC)
     python scripts/ai_report.py --date 2026-10-19
@@ -18,7 +19,7 @@ import sqlalchemy as sa
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.models import AIRequest, AIRequestAttempt  # noqa: E402
+from app.models import AIRequest, AIRequestAttempt, Outfit, User  # noqa: E402
 
 
 def _pct(part: int, whole: int) -> str:
@@ -46,8 +47,9 @@ def report(conn: sa.Connection, day: date, days: int = 1) -> str:
 
     period = day.isoformat() if days == 1 else f"{day.isoformat()} – {(day + timedelta(days=days - 1)).isoformat()}"
     lines = [f"AI report for {period} (UTC)", ""]
+    onboarding = onboarding_lines(conn, start, end)
     if not reqs:
-        return "\n".join(lines + ["No AI requests."])
+        return "\n".join(lines + ["No AI requests.", "", *onboarding])
 
     statuses = Counter(r.status for r in reqs)
     cost = sum(r.cost_usd_micro_total for r in reqs) / 1_000_000
@@ -95,7 +97,46 @@ def report(conn: sa.Connection, day: date, days: int = 1) -> str:
         lines += ["", "failure codes: " + ", ".join(f"{c} {n}" for c, n in errors.most_common())]
     if lat_all := [r.latency_ms_total for r in reqs if r.status in ("ok", "fallback")]:
         lines += ["", f"mean latency {statistics.mean(lat_all):.0f} ms"]
+    lines += ["", *onboarding]
     return "\n".join(lines)
+
+
+def _aware(dt: datetime) -> datetime:
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def onboarding_lines(conn: sa.Connection, start: datetime, end: datetime) -> list[str]:
+    """Accounts registered in the period: how many saw a first AI outfit and how fast (median / p90
+    seconds from sign-up), how many confirmed their email (C3 (a′): the unverified → verified
+    conversion). Demo accounts are left out; the clock starts at users.created_at."""
+    users = conn.execute(
+        sa.select(User.id, User.created_at, User.email_verified_at)
+        .where(User.created_at >= start, User.created_at < end, User.is_demo.is_(False))
+    ).all()
+    lines = [f"onboarding: {len(users)} accounts registered"]
+    if not users:
+        return lines
+    ids = [u.id for u in users]
+    # AI outfits only (an edited suggestion still counts); outfits older than the account are the ones a
+    # claimed demo brought along and don't count as the account's first.
+    first = dict(
+        conn.execute(
+            sa.select(Outfit.user_id, sa.func.min(Outfit.created_at))
+            .join(User, User.id == Outfit.user_id)
+            .where(Outfit.user_id.in_(ids), Outfit.source.in_(("ai", "ai_edited")), Outfit.created_at >= User.created_at)
+            .group_by(Outfit.user_id)
+        ).all()
+    )
+    ttfo = [int((_aware(first[u.id]) - _aware(u.created_at)).total_seconds()) for u in users if u.id in first]
+    verified = sum(1 for u in users if u.email_verified_at is not None)
+    verified_after_outfit = sum(
+        1 for u in users if u.email_verified_at is not None and u.id in first and _aware(u.email_verified_at) >= _aware(first[u.id])
+    )
+    lines.append(f"  first outfit: {len(ttfo)} ({_pct(len(ttfo), len(users))})"
+                 + (f" · time to first outfit p50 {_p(ttfo, 0.5)} s · p90 {_p(ttfo, 0.9)} s" if ttfo else ""))
+    lines.append(f"  verified: {verified} ({_pct(verified, len(users))}) · of which after seeing an outfit "
+                 f"{verified_after_outfit}")
+    return lines
 
 
 def main() -> None:

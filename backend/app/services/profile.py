@@ -4,10 +4,10 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from ..models import FeedbackEvent, Item, Outfit, User
+from ..models import FeedbackEvent, Item, Outfit, RefreshToken, User
 from ..security import hash_password
 from . import images
 
@@ -67,6 +67,34 @@ def delete_account(db: Session, user: User) -> None:
     db.delete(user)
     db.commit()
     images.delete_user_objects(db, user_id)
+
+
+UNVERIFIED_TTL = timedelta(days=14)
+
+
+def cleanup_stale_unverified(db: Session, now: datetime | None = None, dry_run: bool = False, limit: int = 100) -> list[str]:
+    """Accounts that never confirmed their email and have not been used for UNVERIFIED_TTL (no refresh
+    token used or issued since) are deleted with their photos, like expired demo accounts (C3 (a′): an
+    unverified account is a disposable one until it isn't). Returns the ids handled."""
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - UNVERIFIED_TTL
+    last_use = (
+        select(RefreshToken.user_id, func.max(func.coalesce(RefreshToken.last_used_at, RefreshToken.created_at)).label("at"))
+        .group_by(RefreshToken.user_id)
+        .subquery()
+    )
+    stale = db.scalars(
+        select(User)
+        .outerjoin(last_use, last_use.c.user_id == User.id)
+        .where(User.is_demo.is_(False), User.email_verified_at.is_(None), User.created_at < cutoff,
+               or_(last_use.c.at.is_(None), last_use.c.at < cutoff))
+        .limit(limit)
+    ).all()
+    ids = [str(u.id) for u in stale]
+    if not dry_run:
+        for u in stale:
+            delete_account(db, u)
+    return ids
 
 
 # ── explicit style preferences ────────────────────────────────────────────

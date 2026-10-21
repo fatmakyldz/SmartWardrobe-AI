@@ -56,3 +56,29 @@ def test_weekly_report_shows_real_to_estimate_ratio():
     assert "suggest: 1.00 over 2 requests" in text  # 2000 real / 2000 estimated
     with engine.connect() as conn:
         assert "requests 1 " in ai_report.report(conn, date(2026, 10, 18))
+
+
+def test_report_counts_onboarding_ttfo_and_conversion(client, fake_ai, outbox):
+    """Two sign-ups yesterday: one saw an outfit after 90 s and verified later, one never did."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.db import SessionLocal, engine
+    from app.models import Outfit, User
+    from scripts.ai_report import report
+
+    yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
+    t0 = datetime.combine(yesterday, datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=10)
+    with SessionLocal() as db:
+        a = User(email="a@example.com", password_hash="x", created_at=t0, email_verified_at=t0 + timedelta(minutes=30))
+        b = User(email="b@example.com", password_hash="x", created_at=t0 + timedelta(hours=1))
+        db.add_all([a, b])
+        db.flush()
+        db.add(Outfit(user_id=a.id, occasion="casual", title="t", reason="r", created_at=t0 + timedelta(seconds=90)))
+        db.add(Outfit(user_id=a.id, occasion="casual", title="user", reason="r", source="user",
+                      created_at=t0 + timedelta(seconds=10)))  # not an AI outfit: doesn't count
+        db.commit()
+    with engine.connect() as conn:
+        text = report(conn, yesterday)
+    assert "onboarding: 2 accounts registered" in text
+    assert "first outfit: 1 (50.0%) · time to first outfit p50 90 s · p90 90 s" in text
+    assert "verified: 1 (50.0%) · of which after seeing an outfit 1" in text

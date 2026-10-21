@@ -82,6 +82,10 @@ def entitlements(user: User, db: Session, now: datetime | None = None) -> Entitl
     ent = _from_plan(base)
     if user.is_demo:
         return ent  # demo accounts get no subscriptions or grants
+    if user.email_verified_at is None:
+        # C3 (a′): until the email is confirmed the account runs on the small `unverified` plan — enough
+        # to tag the first pieces and see a first outfit, nothing more. Subscriptions and grants wait.
+        return _from_plan("unverified")
 
     sub = db.scalars(
         select(Subscription)
