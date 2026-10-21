@@ -58,7 +58,9 @@ def analyze(
                           tags=Tags(category="top"), ai_skipped="budget_exceeded")
     tags = out.model_dump()
     is_clothing = tags.pop("is_clothing")
-    return AnalyzeOut(image_key=key, image_url=get_storage().url(key), is_clothing=is_clothing, tags=Tags(**tags))
+    confidence, uncertain = tags.pop("confidence"), tags.pop("uncertain")
+    return AnalyzeOut(image_key=key, image_url=get_storage().url(key), is_clothing=is_clothing, tags=Tags(**tags),
+                      confidence=confidence, uncertain=uncertain)
 
 
 @router.post("", response_model=ItemOut, status_code=201)

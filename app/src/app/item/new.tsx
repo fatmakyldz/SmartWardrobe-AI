@@ -7,14 +7,14 @@ import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
 import { CloseIcon } from '@/components/icons';
 import { TagEditor } from '@/components/TagEditor';
 import { Button, Notice, Screen, T } from '@/components/ui';
-import { api, imageSource, PickedImage, Tags } from '@/lib/api';
+import { api, CATEGORIES, Category, imageSource, PickedImage, Tags } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
 import { useAnalysis, useCreateItem, useItems } from '@/lib/queries';
 import { radius, space, usePalette } from '@/lib/theme';
 
 
-type Draft = { key: string; url: string; isClothing: boolean; aiSkipped: boolean; tags: Tags };
+type Draft = { key: string; url: string; isClothing: boolean; aiSkipped: boolean; tags: Tags; uncertain: (keyof Tags)[]; confidence: number | null };
 
 /**
  * One photo → AI tags → the user confirms → saved. With `?first=1` (right after sign-up) it chains:
@@ -26,7 +26,7 @@ export default function NewItem() {
   const { t, lang } = useI18n();
   const errorText = useErrorText();
   const create = useCreateItem();
-  const { first } = useLocalSearchParams<{ first?: string }>();
+  const { first, category: hint } = useLocalSearchParams<{ first?: string; category?: string }>();
   const firstMode = first === '1';
   const items = useItems();
   const analysis = useAnalysis();
@@ -66,7 +66,8 @@ export default function NewItem() {
     setAnalyzing(true);
     try {
       const out = await api.analyze(asset as PickedImage, lang);
-      setDraft({ key: out.image_key, url: out.image_url, isClothing: out.is_clothing, aiSkipped: !!out.ai_skipped, tags: out.tags });
+      setDraft({ key: out.image_key, url: out.image_url, isClothing: out.is_clothing, aiSkipped: !!out.ai_skipped, tags: out.tags,
+                 uncertain: out.uncertain ?? [], confidence: out.confidence ?? null });
     } catch (e) {
       setError(errorText(e));
       setPreview(null);
@@ -80,7 +81,7 @@ export default function NewItem() {
     setError(null);
     try {
       const prev = before.current ?? analysis.data?.outfits_possible ?? 0;
-      await create.mutateAsync({ ...draft.tags, image_key: draft.key });
+      await create.mutateAsync({ ...draft.tags, image_key: draft.key, ai_confidence: draft.confidence });
       const fresh = await analysis.refetch();
       const now = fresh.data?.outfits_possible ?? 0;
       const gained = now - prev;
@@ -146,7 +147,11 @@ export default function NewItem() {
         <View style={{ marginTop: space.xl, gap: space.md }}>
           {reward ? <Notice>{reward}</Notice> : null}
           <T variant="body" color="inkSoft">
-            {firstMode && !added ? t.first.intro : t.add.tip}
+            {firstMode && !added
+              ? t.first.intro
+              : hint && !added && (CATEGORIES as readonly string[]).includes(hint)
+                ? t.add.forCategory(t.categories[hint as Category])
+                : t.add.tip}
           </T>
           {Platform.OS !== 'web' ? <Button label={t.add.camera} onPress={() => pick('camera')} /> : null}
           <Button label={t.add.library} kind={Platform.OS === 'web' ? 'primary' : 'secondary'} onPress={() => pick('library')} />
@@ -162,8 +167,14 @@ export default function NewItem() {
 
       {draft ? (
         <View style={{ marginTop: space.xl, gap: space.xl }}>
-          {draft.aiSkipped ? <Notice>{t.add.aiSkipped}</Notice> : !draft.isClothing ? <Notice>{t.add.notClothing}</Notice> : null}
-          <TagEditor value={draft.tags} onChange={(tags) => setDraft({ ...draft, tags })} />
+          {draft.aiSkipped ? (
+            <Notice>{t.add.aiSkipped}</Notice>
+          ) : !draft.isClothing ? (
+            <Notice>{t.add.notClothing}</Notice>
+          ) : draft.uncertain.length ? (
+            <Notice>{t.add.checkHint(draft.uncertain.length)}</Notice>
+          ) : null}
+          <TagEditor value={draft.tags} onChange={(tags) => setDraft({ ...draft, tags })} uncertain={draft.uncertain} />
           <Button label={t.add.save} onPress={save} loading={create.isPending} />
           <Button
             label={t.add.retake}

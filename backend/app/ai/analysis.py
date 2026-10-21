@@ -38,7 +38,10 @@ GAP_CODES = (
     "few_shoes",  # one pair of shoes → 1
     "low_neutrals",  # under a third of the pieces have a neutral main colour → 1
     "orphan_items",  # pieces that pair with nothing (formality / season) → 1
+    "few_partners",  # a top / bottom with only one piece to go with → 1 (one gap per piece, newest first)
 )
+FEW_PARTNERS = 1  # "few" = this many partners or fewer (an orphan has none and is reported above)
+FEW_PARTNERS_MAX = 2  # at most this many such gaps, so the global cap doesn't drop them all
 
 
 @dataclass(frozen=True)
@@ -180,6 +183,19 @@ def analyze(items: list[ItemDTO], season: str) -> Analysis:
                     and _is_orphan(i, by, all_cores))
     if orphans:
         gaps.append(Gap("orphan_items", severity=1, item_ids=orphans))
+    # The progressive nudge: "add a bottom for this top" — tops and bottoms with one partner, newest
+    # first (outerwear goes over whole outfits, so "its" missing category isn't well defined).
+    orphan_ids = set(orphans)
+    few = 0
+    for item in active:
+        if few >= FEW_PARTNERS_MAX:
+            break
+        if item.id in orphan_ids or item.category not in ("top", "bottom"):
+            continue
+        partners, wanted = _partners(item, by)
+        if 0 < partners <= FEW_PARTNERS:
+            gaps.append(Gap("few_partners", category=wanted, severity=1, item_ids=(item.id,)))
+            few += 1
 
     gaps.sort(key=lambda g: (-g.severity, GAP_CODES.index(g.code), g.occasion or "", g.category or ""))
     return Analysis(season=season, stats=stats, gaps=tuple(gaps[:MAX_GAPS]))
@@ -203,6 +219,19 @@ def _is_orphan(item: ItemDTO, by: dict[str, list[ItemDTO]], all_cores: list[tupl
         return bool(by["top"]) and not any(pair_ok(t, item) for t in by["top"])
     # shoes / outerwear: no core (none of which contains this piece) to go with
     return bool(all_cores) and not any(shoes_ok(item, c) for c in all_cores)
+
+
+def _partners(item: ItemDTO, by: dict[str, list[ItemDTO]]) -> tuple[int, str]:
+    """How many pieces this top / bottom can be worn with (counted only up to "more than a few"), and
+    which category would add more."""
+    other = "bottom" if item.category == "top" else "top"
+    count = 0
+    for o in by[other]:
+        if pair_ok(item, o) if item.category == "top" else pair_ok(o, item):
+            count += 1
+            if count > FEW_PARTNERS:
+                break
+    return count, other
 
 
 def _count_outfits(all_cores: list[tuple[ItemDTO, ...]], shoes: list[ItemDTO]) -> int:

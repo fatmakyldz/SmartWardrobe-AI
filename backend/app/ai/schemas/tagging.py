@@ -5,6 +5,9 @@ from pydantic import BaseModel, model_validator
 from ...vocab import CATEGORIES, COLORS, PATTERNS, SEASONS, clamp_int, keep_known, one_of
 
 
+TAG_FIELDS = ["category", "subcategory", "colors", "pattern", "warmth", "formality", "seasons"]
+
+
 class TaggingOut(BaseModel):
     is_clothing: bool
     category: str
@@ -15,6 +18,8 @@ class TaggingOut(BaseModel):
     warmth: int
     formality: int
     seasons: list[str]
+    confidence: float | None  # 0-1 for the whole description; None when the model didn't say (v1)
+    uncertain: list[str]  # TAG_FIELDS the model flagged; the app highlights them for the user to check
 
     @model_validator(mode="before")
     @classmethod
@@ -32,6 +37,8 @@ class TaggingOut(BaseModel):
             "warmth": clamp_int(raw.get("warmth"), 1, 5, 3),
             "formality": clamp_int(raw.get("formality"), 1, 5, 2),
             "seasons": seasons or list(SEASONS),
+            "confidence": _confidence(raw.get("confidence")),
+            "uncertain": keep_known(raw.get("uncertain"), TAG_FIELDS, len(TAG_FIELDS)),
         }
 
     @classmethod
@@ -48,5 +55,14 @@ class TaggingOut(BaseModel):
             "warmth": one_to_five,
             "formality": one_to_five,
             "seasons": {"type": "array", "items": {"type": "string", "enum": SEASONS}},
+            "confidence": {"type": "number"},  # 0-1 by the prompt; clamped in _confidence (strict schemas take no bounds)
+            "uncertain": {"type": "array", "items": {"type": "string", "enum": TAG_FIELDS}},
         }
         return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}
+
+
+def _confidence(value) -> float | None:
+    try:
+        return round(max(0.0, min(1.0, float(value))), 2)
+    except (TypeError, ValueError):
+        return None

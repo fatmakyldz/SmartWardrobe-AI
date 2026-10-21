@@ -5,6 +5,11 @@ import { APP_NAME } from './brand';
 
 export type Lang = 'en' | 'tr';
 
+// EN: "a top", "shoes" — category labels with the article they take mid-sentence.
+const withArticle = (label: string): string =>
+  ({ Top: 'a top', Bottom: 'a bottom', Dress: 'a dress', Shoes: 'shoes', Outerwear: 'a jacket', Bag: 'a bag', Accessory: 'an accessory' } as Record<string, string>)[label] ?? label.toLowerCase();
+const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
 const en = {
   welcome: {
     tagline: 'Outfits from the clothes you already own, for today’s weather.',
@@ -62,8 +67,7 @@ const en = {
     intro: 'A top and a bottom, or a dress, make the first outfit; shoes complete it. Photograph what you wear most.',
     enough: 'Show my first outfit',
     unlocked: (n: number) => (n === 1 ? '+1 outfit unlocked' : `+${n} outfits unlocked`),
-    starts: (category: string) =>
-      `Add ${({ top: 'a top', bottom: 'a bottom', dress: 'a dress', shoes: 'shoes', outerwear: 'a jacket', bag: 'a bag', accessory: 'an accessory' } as Record<string, string>)[category] ?? category} and the outfits start.`,
+    starts: (category: string) => `Add ${withArticle(cap(category))} and the outfits start.`,
     noNew: 'Saved. More pieces in other categories unlock more outfits.',
   },
   claim: {
@@ -105,6 +109,18 @@ const en = {
     again: 'Suggest again',
     firstDemo: 'Here’s a first look from the sample wardrobe, for today’s weather.',
     firstAuto: 'Your first outfit, from the pieces you just added. Every new piece opens more.',
+    nudgeTitle: 'Next piece to add',
+    nudgeAdd: (category: string) => `Add ${withArticle(category)}`,
+    nudge: (code: string, category: string, occasion: string, piece: string): string =>
+      ({
+        missing_category: `Nothing combines into an outfit without ${withArticle(category)}.`,
+        occasion_uncovered: `${cap(withArticle(category))} in the right register would give you something for ${occasion}.`,
+        season_uncovered: `${cap(withArticle(category))} for this season would open things up.`,
+        few_partners: `${piece} goes with only one thing you own. ${cap(withArticle(category))} in its register would unlock more.`,
+        orphan_items: `${piece} goes with nothing you own yet. ${cap(withArticle(category))} to match it would fix that.`,
+        few_shoes: 'One pair of shoes carries every outfit. A second pair doubles your options.',
+        low_neutrals: `Something neutral — ${withArticle(category)} — would pair with almost everything.`,
+      })[code] ?? code,
     request: 'Tell me what you need',
     requestPlaceholder: 'e.g. warm, smart look for a client lunch, no dress',
     parseWithAi: 'Let the AI read it',
@@ -172,6 +188,7 @@ const en = {
         few_shoes: 'One pair of shoes carries every outfit. A second pair doubles your options.',
         low_neutrals: `Few neutral pieces: something neutral in ${category} would pair with almost everything.`,
         orphan_items: 'These pieces don’t pair with anything you own (formality or season).',
+        few_partners: `This piece goes with only one thing you own; something in ${category} would unlock more.`,
       })[code] ?? code,
     capsuleLink: 'Build a capsule',
   },
@@ -203,6 +220,9 @@ const en = {
     analyzing: 'Reading the photo…',
     notClothing: 'This doesn’t look like clothing. Check the details or try another photo.',
     aiSkipped: 'Fill in the details yourself for now; the AI could not tag this one.',
+    check: 'Worth a check',
+    checkHint: (n: number) => (n === 1 ? 'The AI wasn’t sure about one detail — marked below.' : `The AI wasn’t sure about ${n} details — marked below.`),
+    forCategory: (category: string) => `Photograph ${withArticle(category)}.`,
     save: 'Save to wardrobe',
     retake: 'Use another photo',
   },
@@ -389,6 +409,18 @@ const tr: Dict = {
     again: 'Yeniden öner',
     firstDemo: 'Örnek gardıroptan, bugünün havasına göre ilk bakış.',
     firstAuto: 'İlk kombinin, az önce eklediğin parçalardan. Her yeni parça daha fazlasını açar.',
+    nudgeTitle: 'Sıradaki parça',
+    nudgeAdd: (category) => `${category.toLocaleLowerCase('tr')} ekle`,
+    nudge: (code, category, occasion, piece) =>
+      ({
+        missing_category: `${category} olmadan hiçbir şey kombin olmuyor.`,
+        occasion_uncovered: `Uygun bir ${category.toLocaleLowerCase('tr')} olsa ${occasion} için de bir kombinin olur.`,
+        season_uncovered: `Bu mevsime uygun bir ${category.toLocaleLowerCase('tr')} çok şey açar.`,
+        few_partners: `${piece} sahip olduğun yalnız bir şeyle gidiyor. Aynı ayarda bir ${category.toLocaleLowerCase('tr')} daha çok kombin açar.`,
+        orphan_items: `${piece} henüz hiçbir şeyle gitmiyor. Ona uyan bir ${category.toLocaleLowerCase('tr')} bunu çözer.`,
+        few_shoes: 'Tek ayakkabı bütün kombinleri taşıyor. İkincisi seçeneklerini ikiye katlar.',
+        low_neutrals: `Nötr bir ${category.toLocaleLowerCase('tr')} neredeyse her şeyle gider.`,
+      })[code] ?? code,
     request: 'Ne lazım, söyle',
     requestPlaceholder: 'örn. müşteri yemeği için sıcak ama şık, elbise olmasın',
     parseWithAi: 'Yapay zekâ okusun',
@@ -456,6 +488,7 @@ const tr: Dict = {
         few_shoes: 'Tek ayakkabı bütün kombinleri taşıyor. İkincisi seçeneklerini ikiye katlar.',
         low_neutrals: `Nötr parça az: nötr bir ${category} neredeyse her şeyle gider.`,
         orphan_items: 'Bu parçalar sahip olduğun hiçbir şeyle eşleşmiyor (resmiyet ya da mevsim).',
+        few_partners: `Bu parça sahip olduğun yalnız bir şeyle gidiyor; bir ${category} daha çok kombin açar.`,
       })[code] ?? code,
     capsuleLink: 'Kapsül kur',
   },
@@ -487,6 +520,9 @@ const tr: Dict = {
     analyzing: 'Fotoğraf okunuyor…',
     notClothing: 'Bu bir kıyafete benzemiyor. Bilgileri kontrol et ya da başka bir fotoğraf dene.',
     aiSkipped: 'Şimdilik bilgileri sen doldur; yapay zekâ bu fotoğrafı etiketleyemedi.',
+    check: 'Kontrol et',
+    checkHint: (n) => `Yapay zekâ ${n} ayrıntıdan emin değildi — aşağıda işaretli.`,
+    forCategory: (category) => `Bir ${category.toLocaleLowerCase('tr')} fotoğrafla.`,
     save: 'Gardıroba kaydet',
     retake: 'Başka fotoğraf seç',
   },

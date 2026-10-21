@@ -93,10 +93,13 @@ class AnalyzeOut(BaseModel):
     is_clothing: bool
     tags: Tags
     ai_skipped: str | None = None  # "budget_exceeded": photo stored, default tags for the user to fill in
+    confidence: float | None = None  # 0-1 for the whole description
+    uncertain: list[str] = []  # tag fields the model flagged; the app asks the user to check those
 
 
 class ItemIn(Tags):
     image_key: str = Field(max_length=120)
+    ai_confidence: float | None = Field(default=None, ge=0, le=1)  # as /items/analyze reported it
 
 
 class ItemUpdate(BaseModel):

@@ -189,6 +189,10 @@ def test_tagging_schema_coerces_into_vocabularies():
                                      "warmth": 9, "seasons": ["monsoon"], "pattern": "zigzag"})
     assert (out.category, out.colors, out.warmth, out.pattern) == ("dress", ["burgundy", "black", "red"], 5, "solid")
     assert out.seasons == ["spring", "summer", "autumn", "winter"] and out.is_clothing is True
+    assert out.confidence is None and out.uncertain == []  # a v1-shaped answer still validates
+    out = TaggingOut.model_validate({"category": "top", "confidence": "1.7", "uncertain": ["colors", "price", "warmth", "colors"]})
+    assert out.confidence == 1.0 and out.uncertain == ["colors", "warmth"]
+    assert TaggingOut.model_validate({"category": "top", "confidence": "high"}).confidence is None
 
 
 def test_anthropic_error_detail_is_the_api_message(claude):
