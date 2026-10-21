@@ -45,7 +45,7 @@ The original code is preserved on the [`legacy-streamlit`](https://github.com/fa
 - [ ] Deploy sonrası /auth/demo rate limitinin kullanıcı başına çalıştığını doğrula; gerekirse TRUSTED_PROXY_HOSTS'u Space proxy adresiyle güncelle
 
 ### Phase 4 — Stores
-- [ ] App icon, splash, store screenshots
+- [x] App icon, splash (#29); store screenshots EN/TR for iPhone 6.7" and Android — `app/scripts/store-screenshots.py` renders the web build on the demo wardrobe, output in `docs/store/screenshots/` (regenerate after the rename, on the real provider)
 - [x] Privacy policy page (photos, account data, AI processing) — in the app at `/privacy` (EN/TR); `wardrobe.fomertech.com/privacy` is the public URL for the stores
 - [ ] EAS builds → TestFlight + Google Play internal testing
 - [ ] Store listings (EN/TR) and review submission
