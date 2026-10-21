@@ -14,3 +14,4 @@ httpx==0.28.1
 anthropic==1.11.0
 slowapi==0.1.10
 boto3==1.43.114
+sentry-sdk[fastapi]==2.72.0

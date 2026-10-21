@@ -17,9 +17,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/lib/api';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { captureException, initSentry, wrapRoot } from '@/lib/observability';
 import { I18nProvider } from '@/lib/i18n';
 import { usePalette } from '@/lib/theme';
 
+initSentry();
 void SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient({
@@ -89,6 +91,7 @@ function Root() {
 // providers, so plain components and both languages.
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   void SplashScreen.hideAsync();
+  captureException(error);
   return (
     <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 16, backgroundColor: '#ECE8E3' }}>
       <Text style={{ fontSize: 18, color: '#2a1b26' }}>Something went wrong. / Bir şeyler ters gitti.</Text>
@@ -102,7 +105,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   );
 }
 
-export default function RootLayout() {
+function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
@@ -115,3 +118,5 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+export default wrapRoot(RootLayout);

@@ -8,6 +8,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .ai import AIError
 from .config import get_settings
+from .observability import init_sentry
 from .ratelimit import limiter
 from .routers import auth, items, me, misc, outfits
 
@@ -22,6 +23,8 @@ if not settings.database_url.startswith("sqlite") and (not settings.cors_list or
                        "so any-origin (empty or *) is refused.")
 if not settings.database_url.startswith("sqlite") and settings.ai_debug_log:
     raise RuntimeError("AI_DEBUG_LOG prints full prompts; it is only allowed with a local SQLite database.")
+
+init_sentry(settings)
 
 app = FastAPI(
     title="SmartWardrobe API",

@@ -138,6 +138,12 @@ uvicorn's own proxy handling is turned off in the `Dockerfile` (`--no-proxy-head
 
 Other limits: `MAX_UPLOAD_MB` (default 10), the hourly `ANALYZE_LIMIT` / `SUGGEST_LIMIT` / `DEMO_LIMIT`; plan limits are under "Plans and limits" below.
 
+## Error tracking (Sentry)
+
+Off unless `SENTRY_DSN` is set (`app/observability.py`). Only unexpected errors (5xx, unhandled exceptions) are reported, with the route and the pseudonymous user id; request bodies, credentials, e-mail addresses and IPs are stripped (`send_default_pii=False`, `max_request_body_size="never"`, `_before_send`). Expected API errors (4xx, `AIError`, rate limits) are the product working and are not sent. Performance tracing is off (`SENTRY_TRACES_SAMPLE_RATE=0`).
+
+Setup: sentry.io → create a project of type *FastAPI* → copy its DSN into the Space secret `SENTRY_DSN` (the app has its own project and DSN, see `app/README.md`).
+
 ## Code layout
 
 Routers check auth, input and plan, then call one service. **Services are the only writers of business data** (users, items, outfits, outfit_items, feedback_events); `ai/telemetry` (`ai_requests`) and `entitlements` (`usage_counters`) write only their own tables. Services never call `app.ai`; `services/orchestration.py` reads what a suggestion needs and hands it to `ai/context.py` as plain DTOs.
