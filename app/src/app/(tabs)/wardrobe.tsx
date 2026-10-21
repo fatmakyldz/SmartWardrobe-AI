@@ -8,6 +8,7 @@ import { Button, Chip, Notice, T, tap } from '@/components/ui';
 import { ItemTile } from '@/components/wardrobe';
 import { Category, CATEGORIES } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useHasFeature, useItems } from '@/lib/queries';
 import { radius, space, usePalette } from '@/lib/theme';
@@ -16,7 +17,8 @@ export default function Wardrobe() {
   const p = usePalette();
   const { t } = useI18n();
   const errorText = useErrorText();
-  const canBuild = useHasFeature('user_outfits') === true;
+  const { user } = useAuth();
+  const canBuild = useHasFeature('user_outfits', !!user && !user.is_demo) === true;
   const items = useItems();
   const [filter, setFilter] = useState<Category | 'all'>('all');
   const { width } = useWindowDimensions();

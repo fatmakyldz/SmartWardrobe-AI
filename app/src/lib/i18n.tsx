@@ -76,7 +76,7 @@ const en = {
     title: 'Set up your own wardrobe',
     intro: 'Your answers move to your new account. Keep the sample pieces to start from something, or begin empty.',
     keepItems: 'Keep the 17 sample pieces',
-    keepItemsHint: 'With them, the outfits you liked come along too. They fill the 5-piece limit until your email is confirmed.',
+    keepItemsHint: 'With them, the outfits you liked come along too. They count toward your wardrobe limit until your email is confirmed.',
     startEmpty: 'Start with an empty wardrobe',
   },
   style: {
@@ -139,6 +139,7 @@ const en = {
     incomplete: 'Add at least a top and a bottom, or a dress, and outfits will appear here.',
     verifyBanner: (email: string, pieces: number, requests: number) =>
       `Confirm your email to grow your wardrobe to ${pieces} pieces and get ${requests} suggestions a day. We sent a link to ${email}.`,
+    verifyBannerShort: (email: string) => `Confirm your email to grow your wardrobe. We sent a link to ${email}.`,
     quota: (left: number, total: number) => (left === 0 ? `No suggestions left today (${total} a day).` : `${left} of ${total} suggestions left today.`),
     resend: 'Send the link again',
     resent: 'Sent. Check your inbox (and spam).',
@@ -393,7 +394,7 @@ const tr: Dict = {
     title: 'Kendi gardırobunu kur',
     intro: 'Cevapların yeni hesabına taşınır. Örnek parçaları tutup bir yerden başlayabilir ya da boş başlayabilirsin.',
     keepItems: '17 örnek parçayı tut',
-    keepItemsHint: 'Onlarla birlikte beğendiğin kombinler de gelir. E-postan doğrulanana kadar 5 parça sınırını doldururlar.',
+    keepItemsHint: 'Onlarla birlikte beğendiğin kombinler de gelir. E-postan doğrulanana kadar gardırop sınırından sayılırlar.',
     startEmpty: 'Boş gardıropla başla',
   },
   style: {
@@ -456,6 +457,7 @@ const tr: Dict = {
     incomplete: 'En az bir üst ve bir alt ya da bir elbise ekle, kombinler burada görünsün.',
     verifyBanner: (email, pieces, requests) =>
       `Gardırobun ${pieces} parçaya çıksın, günde ${requests} öneri al: e-postanı doğrula. ${email} adresine bir bağlantı gönderdik.`,
+    verifyBannerShort: (email) => `Gardırobunu büyütmek için e-postanı doğrula. ${email} adresine bir bağlantı gönderdik.`,
     quota: (left, total) => (left === 0 ? `Bugünlük öneri hakkın bitti (günde ${total}).` : `Bugün ${left} / ${total} öneri hakkın kaldı.`),
     resend: 'Bağlantıyı tekrar gönder',
     resent: 'Gönderildi. Gelen kutunu (ve spam klasörünü) kontrol et.',

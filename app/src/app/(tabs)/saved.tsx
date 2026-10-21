@@ -6,6 +6,7 @@ import { Chip, Notice, Screen, T } from '@/components/ui';
 import { OutfitBoard } from '@/components/wardrobe';
 import { Outfit } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useFeedback, useHasFeature, useOutfits, useWorn } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
@@ -14,7 +15,8 @@ export default function Saved() {
   const p = usePalette();
   const { t } = useI18n();
   const errorText = useErrorText();
-  const canEdit = useHasFeature('user_outfits') === true;
+  const { user } = useAuth();
+  const canEdit = useHasFeature('user_outfits', !!user && !user.is_demo) === true;
   const [liked, setLiked] = useState(true);
   const outfits = useOutfits(liked);
   const feedback = useFeedback();

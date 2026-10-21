@@ -51,6 +51,8 @@ def reconcile_day(db: Session, day: date, apply: bool = True) -> list[Drift]:
 
     truth: dict[tuple[uuid.UUID, str], list[int]] = {}
     for subject_id, feature, status, inp, out, created_at, tz_name in rows:
+        # Bucketed with the user's *current* timezone; consume() used the one in force at the time. A user who
+        # changes timezone can see a day's counts shift on reconcile — accepted for V1.0.
         local_day = (created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)).astimezone(_zone(tz_name)).date()
         if local_day != day:
             continue

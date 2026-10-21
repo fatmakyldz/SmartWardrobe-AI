@@ -5,10 +5,11 @@ from ..ai import telemetry
 from ..db import get_db
 from ..models import User
 from ..entitlements import entitlements
-from ..entitlements.service import check_ai_budget, plans_config
+from ..entitlements.service import after_verify, usage_snapshot
 from ..schemas import AfterVerifyOut, EntitlementsOut, StyleIn, StyleOut, UsageOut, UserOut, UserUpdate
 from ..security import current_user
 from ..services import profile
+from ..services.wardrobe import active_item_count
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -37,17 +38,13 @@ def my_entitlements(user: User = Depends(current_user), db: Session = Depends(ge
     """Plan, limits, features and today's usage (AI-08). Read-only; the gateway's own budget check is the
     one that decides a request, this is the same numbers for the app to show."""
     ent = entitlements(user, db)
-    decision = check_ai_budget(db, user.id, "suggest", 0, ent, user.timezone)
+    decision = usage_snapshot(db, user, ent)
     used_requests = ent.daily_ai_requests - (decision.remaining_requests or 0)
-    verified = user.is_demo or user.email_verified_at is not None
-    after_verify = None
-    if not verified:
-        nxt = user.plan if user.plan in plans_config()["plans"] else "free"
-        np_ = plans_config()["plans"][nxt]
-        after_verify = AfterVerifyOut(plan=nxt, max_items=np_["max_items"], daily_ai_requests=np_["daily_ai_requests"])
+    nxt = after_verify(user)
     return EntitlementsOut(
-        plan=ent.plan, verified=verified, after_verify=after_verify,
-        max_items=ent.max_items, items_used=sum(1 for i in user.items if i.archived_at is None),
+        plan=ent.plan, verified=nxt is None,
+        after_verify=AfterVerifyOut(plan=nxt.plan, max_items=nxt.max_items, daily_ai_requests=nxt.daily_ai_requests) if nxt else None,
+        max_items=ent.max_items, items_used=active_item_count(user),
         daily_ai_requests=ent.daily_ai_requests, daily_ai_tokens=ent.daily_ai_tokens,
         features=sorted(ent.allowed_features), model_tier=ent.model_tier, history_limit=ent.history_limit,
         usage=UsageOut(requests_used=max(0, used_requests), requests_left=decision.remaining_requests or 0,

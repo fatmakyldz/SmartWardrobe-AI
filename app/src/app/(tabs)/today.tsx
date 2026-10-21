@@ -40,7 +40,7 @@ export default function Today() {
   const feedback = useFeedback();
   const worn = useWorn();
   const ent = useEntitlements(!!user).data;
-  const canEdit = useHasFeature('user_outfits') === true;
+  const canEdit = useHasFeature('user_outfits', !!user && !user.is_demo) === true;
   const intent = useLatestIntent().data;
 
   const cats = new Set((items.data ?? []).map((i) => i.category));
@@ -86,7 +86,13 @@ export default function Today() {
     <Screen>
       {unverified ? (
         <View style={{ marginTop: space.lg, gap: space.sm }}>
-          <Notice>{resent ? t.today.resent : t.today.verifyBanner(user.email, ent?.after_verify?.max_items ?? 50, ent?.after_verify?.daily_ai_requests ?? 5)}</Notice>
+          <Notice>
+            {resent
+              ? t.today.resent
+              : ent?.after_verify
+                ? t.today.verifyBanner(user.email, ent.after_verify.max_items, ent.after_verify.daily_ai_requests)
+                : t.today.verifyBannerShort(user.email)}
+          </Notice>
           {resend.isError ? <Notice tone="error">{errorText(resend.error)}</Notice> : null}
           {!resent ? (
             <Button label={t.today.resend} kind="secondary" loading={resend.isPending} onPress={() => resend.mutate()} />

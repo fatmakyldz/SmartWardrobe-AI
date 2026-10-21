@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
@@ -9,6 +9,7 @@ import { ItemTile } from '@/components/wardrobe';
 import { api, ApiError, Occasion, OCCASIONS } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
+import { invalidateUsage } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
 
 /**
@@ -26,7 +27,9 @@ export default function CapsuleScreen() {
 
   // The explanation is the only AI spend: with today's budget gone, fall back to the deterministic
   // capsule (pieces, outfits, gaps) and say why there is no summary.
+  const qc = useQueryClient();
   const build = useMutation({
+    onSettled: () => void invalidateUsage(qc), // capsule_explain is request-counted
     mutationFn: async () => {
       try {
         return { ...(await api.capsule({ occasions, size, lang, explain: true })), budget: false };

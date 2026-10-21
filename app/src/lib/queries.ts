@@ -53,8 +53,9 @@ export function useSuggest() {
       qc.setQueryData<Outfit[]>(keys.latestOutfits, res.outfits);
       qc.setQueryData<Intent | null>(keys.latestIntent, res.intent);
       invalidateOutfitLists(qc);
-      void invalidateUsage(qc);
     },
+    // Settled, not success: a refusal (budget_exceeded, or quota spent on another device) changes the numbers too.
+    onSettled: () => void invalidateUsage(qc),
   });
 }
 
@@ -99,13 +100,17 @@ export function useEntitlements(enabled = true) {
   return useQuery({ queryKey: keys.entitlements, queryFn: api.entitlements, enabled, staleTime: 60_000 });
 }
 
-/** True when the plan includes the feature; undefined while unknown (callers treat that as "hide"). */
-export function useHasFeature(feature: Feature): boolean | undefined {
+/**
+ * True when the plan includes the feature; undefined while loading (callers hide the control until then).
+ * If the entitlements can't be fetched at all, `fallback` decides — the server still enforces the feature.
+ */
+export function useHasFeature(feature: Feature, fallback = false): boolean | undefined {
   const ent = useEntitlements();
-  return ent.data ? ent.data.features.includes(feature) : undefined;
+  if (ent.data) return ent.data.features.includes(feature);
+  return ent.isError ? fallback : undefined;
 }
 
-function invalidateUsage(qc: QueryClient) {
+export function invalidateUsage(qc: QueryClient) {
   return qc.invalidateQueries({ queryKey: keys.entitlements });
 }
 

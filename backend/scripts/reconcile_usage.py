@@ -17,6 +17,8 @@ from app.entitlements.reconcile import reconcile_day  # noqa: E402
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    # Default: yesterday (UTC). Run it after 12:00 UTC, when yesterday has ended in every timezone; earlier,
+    # a UTC−x user's local day is still open and a concurrent consume() could lose an increment.
     parser.add_argument("--date", type=date.fromisoformat, default=datetime.now(timezone.utc).date() - timedelta(days=1))
     parser.add_argument("--dry-run", action="store_true", help="report only; change nothing")
     args = parser.parse_args()
