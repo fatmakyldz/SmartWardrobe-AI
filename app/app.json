@@ -62,7 +62,8 @@
         {
           "organization": "fomertech",
           "project": "smartwardrobe-app",
-          "url": "https://sentry.io/"
+          "url": "https://sentry.io/",
+          "disableAutoUpload": true
         }
       ]
     ],

@@ -91,7 +91,7 @@ function Root() {
 // providers, so plain components and both languages.
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   void SplashScreen.hideAsync();
-  captureException(error);
+  useEffect(() => captureException(error), [error]);
   return (
     <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 16, backgroundColor: '#ECE8E3' }}>
       <Text style={{ fontSize: 18, color: '#2a1b26' }}>Something went wrong. / Bir şeyler ters gitti.</Text>

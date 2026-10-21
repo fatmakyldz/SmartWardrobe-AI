@@ -140,7 +140,7 @@ Other limits: `MAX_UPLOAD_MB` (default 10), the hourly `ANALYZE_LIMIT` / `SUGGES
 
 ## Error tracking (Sentry)
 
-Off unless `SENTRY_DSN` is set (`app/observability.py`). Only unexpected errors (5xx, unhandled exceptions) are reported, with the route and the pseudonymous user id; request bodies, credentials, e-mail addresses and IPs are stripped (`send_default_pii=False`, `max_request_body_size="never"`, `_before_send`). Expected API errors (4xx, `AIError`, rate limits) are the product working and are not sent. Performance tracing is off (`SENTRY_TRACES_SAMPLE_RATE=0`).
+Off unless `SENTRY_DSN` is set (`app/observability.py`). Only unexpected errors are reported — unhandled exceptions and 5xx `AIError`s (`prompt_not_found`, every provider down) — with the route and the pseudonymous user id. Nothing else about the person travels: no request bodies, query strings (coordinates), credentials, e-mail addresses or IPs (`send_default_pii=False`, `max_request_body_size="never"`, `include_local_variables=False` — frame locals would hold the ASGI scope and request models — `_before_send`, `_before_breadcrumb`, and the `uvicorn.access` log is not turned into breadcrumbs). Expected API errors (4xx, rate limits, 4xx `AIError`s) are the product working and are not sent. Performance tracing is off. `tests/test_observability.py` runs the app against a fake transport and asserts all of this.
 
 Setup: sentry.io → create a project of type *FastAPI* → copy its DSN into the Space secret `SENTRY_DSN` (the app has its own project and DSN, see `app/README.md`).
 

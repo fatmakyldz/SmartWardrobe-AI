@@ -8,7 +8,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .ai import AIError
 from .config import get_settings
-from .observability import init_sentry
+from .observability import capture, init_sentry
 from .ratelimit import limiter
 from .routers import auth, items, me, misc, outfits
 
@@ -51,6 +51,8 @@ def rate_limited(request: Request, exc: RateLimitExceeded):
 
 @app.exception_handler(AIError)
 def ai_error(request: Request, exc: AIError):
+    if exc.status >= 500:  # handled here, so the SDK would not see it: a missing prompt, every provider down
+        capture(exc)
     return JSONResponse(status_code=exc.status, content={"detail": {"code": exc.code, **exc.detail}})
 
 
