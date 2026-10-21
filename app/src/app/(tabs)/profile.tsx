@@ -1,7 +1,9 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Linking, Platform, View } from 'react-native';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { Alert, Platform, View } from 'react-native';
 
 import { CityPicker } from '@/components/CityPicker';
 import { Button, Chip, Notice, Screen, T } from '@/components/ui';
@@ -13,7 +15,7 @@ import { useEntitlements } from '@/lib/queries';
 import { LANG_LABELS, SUPPORTED_LANGS } from '@/lib/langs';
 import { space, usePalette } from '@/lib/theme';
 
-const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://fomertech.com';
+const EXPORT_FILE = 'smartwardrobe-export.json';
 
 function confirm(message: string, okLabel: string, cancelLabel: string): Promise<boolean> {
   if (Platform.OS === 'web') return Promise.resolve(globalThis.confirm?.(message) ?? false);
@@ -33,6 +35,7 @@ export default function Profile() {
   const [pickingCity, setPickingCity] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const ent = useEntitlements(!!user).data;
 
   if (!user) return null;
@@ -43,6 +46,34 @@ export default function Profile() {
       setUser(await api.updateMe({ locale: l }));
     } catch (e) {
       setError(errorText(e));
+    }
+  }
+
+  // One JSON file with everything the account holds: a download on the web, the share sheet elsewhere.
+  async function exportData() {
+    setExporting(true);
+    setError(null);
+    try {
+      const text = await api.exportData();
+      if (Platform.OS === 'web') {
+        const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = EXPORT_FILE;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      } else {
+        // A real file in the cache (the share sheet's text path truncates and Android caps it ~1 MB).
+        const file = new File(Paths.cache, EXPORT_FILE);
+        await file.write(text);
+        await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json', dialogTitle: EXPORT_FILE });
+      }
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -144,7 +175,8 @@ export default function Profile() {
 
       <View style={{ marginTop: space.xxxl, gap: space.md }}>
         <Button label={t.profile.signOut} kind="secondary" onPress={signOut} />
-        <Button label={t.profile.privacy} kind="ghost" onPress={() => Linking.openURL(PRIVACY_URL)} />
+        <Button label={t.profile.exportData} kind="ghost" onPress={exportData} loading={exporting} />
+        <Button label={t.profile.privacy} kind="ghost" onPress={() => router.push('/privacy')} />
         <Button label={t.profile.deleteAccount} kind="danger" onPress={deleteAccount} loading={deleting} />
         <T variant="tiny" color="muted" style={{ textAlign: 'center', marginTop: space.lg, color: p.muted }}>
           {t.profile.version(Constants.expoConfig?.version ?? '')}

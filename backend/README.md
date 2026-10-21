@@ -72,7 +72,8 @@ New accounts get a verification email (Resend, `RESEND_API_KEY`, sender `EMAIL_F
 - Demo accounts share 17 pictures under `demo/{file}.webp` (`user_id` NULL), uploaded once on the first `/auth/demo`; they are never deleted. `services.images.copy_shared_image` gives an item its own copy (demo claim, AI-07).
 - Account deletion: rows in one transaction, then the `u/{user}/` prefix in the bucket.
 - `GET /images/{key}` exists only in db mode, for the signed-in owner (shared demo pictures: demo accounts); 404 otherwise, and always 404 in s3 mode.
-- `python scripts/cleanup_orphans.py [--dry-run]` (weekly): orphan rows older than 24 h → object + row deleted; in s3 mode also bucket ↔ table reconciliation (objects with no row and no item, older than 24 h, are deleted; rows whose object is missing are listed).
+- `python scripts/cleanup_orphans.py [--dry-run]` (weekly — `.github/workflows/cleanup.yml` runs it Mondays 03:17 UTC against production once its secrets are set; until then by hand): orphan rows older than 24 h → object + row deleted; stale unverified accounts (> 14 days unused) deleted; `ai_requests` older than 90 days lose their `subject_id` (§9 retention; the rows stay as anonymous aggregates — the 13-month roll-up is a later step); in s3 mode also bucket ↔ table reconciliation (objects with no row and no item, older than 24 h, are deleted; rows whose object is missing are listed).
+- Uptime: nothing in the Space tells you it is down. Point an external monitor (UptimeRobot's free plan, 5-minute checks) at `https://api.fomertech.com/` (the health route) and have it e-mail you.
 
 ### Switching production to the bucket (`STORAGE_BACKEND=s3`)
 
@@ -104,6 +105,7 @@ Rollback: set `STORAGE_BACKEND=db` again — the `images` table is untouched unt
 | POST | `/auth/forgot`, `/auth/reset` | `{email}` → always 200 / `{token, password}` → new password, every session signed out |
 | POST | `/auth/demo` | `{locale, style_profile?}` → private demo account with a 17-piece sample wardrobe (deleted after 24 h); `style_profile` carries the onboarding answers (same shape as `PATCH /me/style`) so the first suggestion already uses them |
 | GET/PATCH/DELETE | `/me` | profile, city, language; DELETE removes the account and every photo |
+| GET | `/me/export` | the account's data as one JSON file (account, style answers, pieces with short-lived photo links, outfits, feedback); 5/hour |
 | GET | `/me/entitlements` | plan, limits, features and today's usage (`requests_used/left`, `tokens_used/left`, `reset_at`), plus `after_verify` (what confirming the e-mail unlocks) while unverified — the numbers the app shows, from config |
 | GET/PATCH | `/me/style` | style preferences `{answers: {q1 style, q2 palettes, q3 priority}, liked_colors, disliked_colors, styles, avoid}` (fixed vocabularies) + the rule-based taste summary |
 | POST | `/items/analyze` | upload a photo → stored + AI-suggested tags, plus `confidence` (0-1) and `uncertain` (tag fields the model flagged) |

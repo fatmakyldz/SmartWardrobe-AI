@@ -123,6 +123,13 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' | 'claim' }) {
           />
           {error ? <Notice tone="error">{error}</Notice> : null}
           <Button label={isUp ? t.auth.signUp : t.auth.signIn} onPress={submit} loading={busy} disabled={!valid} />
+          {isUp ? (
+            <Pressable accessibilityRole="link" onPress={() => router.push('/privacy')} hitSlop={8}>
+              <T variant="small" color="muted" style={{ textAlign: 'center', textDecorationLine: 'underline' }}>
+                {t.auth.privacyNote}
+              </T>
+            </Pressable>
+          ) : null}
           {!isUp ? <Button label={t.auth.forgot} kind="ghost" onPress={() => router.push('/forgot')} /> : null}
           {!isClaim ? (
             <Button

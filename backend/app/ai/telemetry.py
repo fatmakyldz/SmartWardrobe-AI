@@ -6,9 +6,9 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from ..models import AIRequest as AIRequestRow
@@ -113,6 +113,21 @@ class Telemetry:
             return False
         finally:
             db.close()
+
+
+SUBJECT_RETENTION = timedelta(days=90)
+
+
+def anonymize_old_requests(db: Session, now: datetime | None = None, dry_run: bool = False) -> int:
+    """§9 retention: rows older than SUBJECT_RETENTION lose their subject_id and become anonymous
+    aggregates (features, tokens and cost stay for the reports). Returns the row count. The caller commits.
+    (The 13-month roll-up into monthly aggregates is a separate, later step — see ROADMAP.)"""
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - SUBJECT_RETENTION
+    where = (AIRequestRow.subject_id.is_not(None), AIRequestRow.created_at < cutoff)
+    if dry_run:
+        return db.scalar(select(func.count()).select_from(AIRequestRow).where(*where)) or 0
+    return db.execute(update(AIRequestRow).where(*where).values(subject_id=None)).rowcount
 
 
 def forget_subject(db: Session, subject_id: uuid.UUID) -> None:

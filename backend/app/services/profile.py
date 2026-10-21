@@ -5,9 +5,10 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from ..models import FeedbackEvent, Item, Outfit, RefreshToken, User
+from ..models import AIRequest, FeedbackEvent, Item, Outfit, RefreshToken, UsageCounter, User
+from ..storage import get_storage
 from ..security import hash_password
 from ..vocab import normalize_lang
 from . import images
@@ -59,6 +60,81 @@ def update_profile(db: Session, user: User, values: dict) -> User:
         setattr(user, field, value.strip() if isinstance(value, str) else value)
     db.commit()
     return user
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+def export_account(db: Session, user: User, now: datetime | None = None) -> dict:
+    """Everything the account holds, as plain JSON (data portability, §9): profile, style answers, pieces
+    (tags + a short-lived photo link), outfits with their pieces, feedback events, sign-in sessions, and the
+    usage records still linked to the account (daily counters; AI requests younger than the 90-day
+    anonymisation — feature, status, tokens, time; never prompts). Read-only."""
+    now = now or datetime.now(timezone.utc)
+    storage = get_storage()
+    items = db.scalars(select(Item).where(Item.user_id == user.id).order_by(Item.created_at)).all()
+    outfits = db.scalars(
+        select(Outfit).where(Outfit.user_id == user.id).options(selectinload(Outfit.outfit_items)).order_by(Outfit.created_at)
+    ).all()
+    feedback = db.scalars(select(FeedbackEvent).where(FeedbackEvent.user_id == user.id).order_by(FeedbackEvent.created_at)).all()
+    sessions = db.scalars(select(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None),
+                                                     RefreshToken.expires_at > now).order_by(RefreshToken.created_at)).all()
+    counters = db.scalars(select(UsageCounter).where(UsageCounter.user_id == user.id)
+                          .order_by(UsageCounter.period_start, UsageCounter.feature)).all()
+    requests = db.scalars(select(AIRequest).where(AIRequest.subject_id == user.id).order_by(AIRequest.created_at)).all()
+    return {
+        "format": "smartwardrobe-export/1",
+        "exported_at": now.isoformat(),
+        "account": {
+            "email": user.email, "name": user.name, "locale": user.locale, "timezone": user.timezone,
+            "city": user.city, "lat": user.lat, "lon": user.lon, "plan": user.plan,
+            "created_at": _iso(user.created_at), "email_verified_at": _iso(user.email_verified_at),
+            "onboarding_completed_at": _iso(user.onboarding_completed_at),
+        },
+        "style": {"answers": user.style_profile or {}, "summary": user.style_summary, "summary_at": _iso(user.style_summary_at)},
+        "items": [
+            {
+                "id": str(i.id), "name": i.name, "category": i.category, "subcategory": i.subcategory,
+                "colors": i.colors or [], "pattern": i.pattern, "warmth": i.warmth, "formality": i.formality,
+                "seasons": i.seasons or [], "brand": i.brand, "material": i.material, "is_favorite": i.is_favorite,
+                "wear_count": i.wear_count, "last_worn_at": _iso(i.last_worn_at), "archived_at": _iso(i.archived_at),
+                "ai_confidence": i.ai_confidence, "ai_tags_raw": i.ai_tags_raw, "created_at": _iso(i.created_at),
+                # s3 mode: a presigned link that expires in minutes — download the photos with the export.
+                # db mode (local only): an /images/ path that needs the bearer token.
+                "photo_url": storage.url(i.image_key),
+            }
+            for i in items
+        ],
+        "outfits": [
+            {
+                "id": str(o.id), "title": o.title, "reason": o.reason, "occasion": o.occasion, "note": o.note,
+                "weather": o.weather or {}, "source": o.source, "rating": o.rating, "lang": o.lang,
+                "worn_at": _iso(o.worn_at), "created_at": _iso(o.created_at),
+                "item_ids": [str(oi.item_id) for oi in sorted(o.outfit_items, key=lambda oi: oi.position)] or list(o.item_ids or []),
+            }
+            for o in outfits
+        ],
+        "feedback": [
+            {"kind": f.kind, "outfit_id": str(f.outfit_id) if f.outfit_id else None,
+             "item_id": str(f.item_id) if f.item_id else None, "created_at": _iso(f.created_at)}
+            for f in feedback
+        ],
+        "sessions": [
+            {"device": s.device_label, "signed_in_at": _iso(s.created_at), "last_used_at": _iso(s.last_used_at), "expires_at": _iso(s.expires_at)}
+            for s in sessions
+        ],
+        "usage": {
+            "daily_counters": [
+                {"day": c.period_start.isoformat(), "feature": c.feature, "requests": c.count, "tokens": c.tokens} for c in counters
+            ],
+            "ai_requests": [
+                {"feature": r.feature, "status": r.status, "created_at": _iso(r.created_at),
+                 "input_tokens": r.input_tokens_total, "output_tokens": r.output_tokens_total}
+                for r in requests
+            ],
+        },
+    }
 
 
 def delete_account(db: Session, user: User) -> None:

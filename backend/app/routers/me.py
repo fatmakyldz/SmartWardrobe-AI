@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ..ai import telemetry
@@ -7,6 +8,7 @@ from ..models import User
 from ..entitlements import entitlements
 from ..entitlements.service import after_verify, usage_snapshot
 from ..schemas import AfterVerifyOut, EntitlementsOut, StyleIn, StyleOut, UsageOut, UserOut, UserUpdate
+from ..ratelimit import limiter
 from ..security import current_user
 from ..services import profile
 from ..services.wardrobe import active_item_count
@@ -22,6 +24,14 @@ def me(user: User = Depends(current_user)):
 @router.patch("", response_model=UserOut)
 def update_me(body: UserUpdate, user: User = Depends(current_user), db: Session = Depends(get_db)):
     return profile.update_profile(db, user, body.model_dump(exclude_unset=True))
+
+
+@router.get("/export")
+@limiter.limit("5/hour")
+def export_me(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """The account's data as one JSON file (§9 data portability). Photo links inside expire in minutes."""
+    body = profile.export_account(db, user)
+    return JSONResponse(body, headers={"Content-Disposition": 'attachment; filename="smartwardrobe-export.json"'})
 
 
 @router.delete("", status_code=204)

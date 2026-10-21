@@ -41,6 +41,7 @@ app.add_middleware(
     allow_credentials=True,  # the web app's refresh cookie
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", auth.COOKIE_HEADER],
+    expose_headers=["Content-Disposition"],  # /me/export's filename
 )
 
 

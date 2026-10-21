@@ -65,6 +65,8 @@ function Root() {
         {/* Links from emails: open whether or not someone is signed in on this device. */}
         <Stack.Screen name="auth/verify" />
         <Stack.Screen name="auth/reset" />
+        {/* Public: the stores and the sign-up screen link to it. */}
+        <Stack.Screen name="privacy" />
         <Stack.Protected guard={!user}>
           <Stack.Screen name="welcome" />
           <Stack.Screen name="onboarding" />

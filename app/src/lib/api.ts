@@ -302,6 +302,8 @@ export const api = {
   me: () => request<User>('/me'),
   updateMe: (b: Partial<Pick<User, 'name' | 'locale' | 'city' | 'lat' | 'lon'>>) => request<User>('/me', json('PATCH', b)),
   deleteMe: () => request<void>('/me', { method: 'DELETE' }),
+  /** Everything the account holds, as the JSON text of one file (data portability). */
+  exportData: () => request<unknown>('/me/export').then((body) => JSON.stringify(body, null, 2)),
   entitlements: () => request<Entitlements>('/me/entitlements'),
   style: () => request<StyleProfile>('/me/style'),
   updateStyle: (b: StylePatch) => request<StyleProfile>('/me/style', json('PATCH', b)),

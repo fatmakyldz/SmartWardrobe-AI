@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import get_settings  # noqa: E402
 from app.services.images import cleanup_orphans, reconcile  # noqa: E402
+from app.ai.telemetry import anonymize_old_requests  # noqa: E402
 from app.services.profile import cleanup_stale_unverified  # noqa: E402
 
 
@@ -46,6 +47,10 @@ def main() -> None:
         _show(f"orphan rows (>24 h, {verb})", r.orphan_rows)
         _show("failed", r.failed)
         _show(f"stale unverified accounts (>14 days unused, {verb})", cleanup_stale_unverified(db, dry_run=args.dry_run))
+        n = anonymize_old_requests(db, dry_run=args.dry_run)
+        if not args.dry_run:
+            db.commit()
+        _show(f"ai_requests older than 90 days ({'to anonymise' if args.dry_run else 'anonymised'})", [str(n)] if n else [])
         if get_settings().storage_backend != "s3":
             print("reconciliation skipped: STORAGE_BACKEND is not s3")
             return
