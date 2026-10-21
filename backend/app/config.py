@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     # Lifetime of the presigned image links the API hands out (and their Cache-Control max-age).
     image_url_seconds: int = 900
 
+    # Error tracking (Sentry). Empty DSN = off (local runs, tests). Events carry no request bodies,
+    # no user e-mail: the pseudonymous user id only.
+    sentry_dsn: str = ""
+    sentry_environment: str = "production"
+    sentry_traces_sample_rate: float = 0.0  # performance tracing off; errors only
+
     # Public URL of this API, used to build image links in db storage mode.
     public_base_url: str = ""
 
