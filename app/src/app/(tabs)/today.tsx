@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { router, useIsFocused } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, useWindowDimensions, View } from 'react-native';
 
@@ -46,18 +46,20 @@ export default function Today() {
 
   // The first outfit comes without a tap (§10 step 2, and the first-pieces flow): once per account,
   // only while it has no outfit at all, so coming back to the tab doesn't spend another request.
-  // (The history list is the same query Saved uses; 10-minute stale time, so it's one fetch.)
-  const history = useOutfits(false, !!user);
+  // Only while this tab is on screen: the tabs stay mounted under the add-item modal, and a piece
+  // saved there must not spend a request from here before the user is done.
+  const focused = useIsFocused();
+  const history = useOutfits(false, !!user && ready && focused);
   const autoFor = useRef<string | null>(null);
   const [autoShown, setAutoShown] = useState(false);
   useEffect(() => {
-    if (!user || !ready || !history.isSuccess || history.data.length > 0) return;
+    if (!user || !ready || !focused || !history.isSuccess || history.data.length > 0) return;
     if (autoFor.current === user.id || suggest.isPending) return;
     autoFor.current = user.id;
     setAutoShown(true);
     suggest.mutate({ occasion: 'casual', note: '', lang });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, ready, history.isSuccess, history.data?.length]);
+  }, [user?.id, ready, focused, history.isSuccess, history.data?.length]);
 
   async function pickCity(c: { city: string; lat: number; lon: number }) {
     setPickingCity(false);
@@ -179,7 +181,7 @@ export default function Today() {
       )}
 
       <View style={{ gap: space.xxl, marginTop: space.xxl }}>
-        {autoShown && outfits.length && user?.is_demo ? <Notice>{t.today.firstDemo}</Notice> : null}
+        {autoShown && outfits.length ? <Notice>{user?.is_demo ? t.today.firstDemo : t.today.firstAuto}</Notice> : null}
         {worn.isError ? <Notice tone="error">{errorText(worn.error)}</Notice> : null}
         {outfits.map((o) => (
           <OutfitBoard

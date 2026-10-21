@@ -1,8 +1,8 @@
 """Pre-launch accounts → email verified (stop condition C1, docs/AI-00-foundation.md §14).
 
-After 0002_ai_foundation every account has email_verified_at = NULL. Once AI features require a
-verified email (AI-05), accounts created before verification existed would be locked out. This marks
-them verified with email_verified_at = created_at. Demo accounts are skipped (they are exempt anyway).
+After 0002_ai_foundation every account has email_verified_at = NULL. Unverified accounts run on the
+small `unverified` plan (C3 (a′)), so accounts created before verification existed would be capped at
+5 pieces. This marks them verified with email_verified_at = created_at. Demo accounts are skipped (they are exempt anyway).
 
 Run after `alembic upgrade head`, against the database in DATABASE_URL:
 

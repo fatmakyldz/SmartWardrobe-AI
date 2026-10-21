@@ -2,7 +2,9 @@
 
 1. Orphans: rows with attached_at NULL older than 24 h (an analyze the user never saved, or a delete
    whose bucket call failed) → object and row deleted.
-2. Reconciliation, both ways (STORAGE_BACKEND=s3 only): objects in the bucket with no row and no item
+2. Stale unverified accounts: never confirmed the email and not used for 14 days → account and photos
+   deleted, like expired demo accounts (C3 (a′)).
+3. Reconciliation, both ways (STORAGE_BACKEND=s3 only): objects in the bucket with no row and no item
    pointing at them, older than 24 h → deleted; rows whose object is missing → listed (not fixable
    here: the photo is gone). Shared demo pictures (demo/…) are never deleted.
 
@@ -20,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import get_settings  # noqa: E402
 from app.services.images import cleanup_orphans, reconcile  # noqa: E402
+from app.services.profile import cleanup_stale_unverified  # noqa: E402
 
 
 def _show(label: str, keys: list[str], limit: int = 20) -> None:
@@ -42,6 +45,7 @@ def main() -> None:
         r = cleanup_orphans(db, dry_run=args.dry_run)
         _show(f"orphan rows (>24 h, {verb})", r.orphan_rows)
         _show("failed", r.failed)
+        _show(f"stale unverified accounts (>14 days unused, {verb})", cleanup_stale_unverified(db, dry_run=args.dry_run))
         if get_settings().storage_backend != "s3":
             print("reconciliation skipped: STORAGE_BACKEND is not s3")
             return

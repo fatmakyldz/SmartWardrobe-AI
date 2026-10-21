@@ -72,14 +72,5 @@ def current_user(
     return user
 
 
-def is_verified(user: User) -> bool:
-    """Demo accounts count as verified. Since C3 (a′) an unverified account still gets the small
-    `unverified` plan (entitlements), so AI routes gate on features, not on this."""
-    return user.is_demo or user.email_verified_at is not None
-
-
-def verified_user(user: User = Depends(current_user)) -> User:
-    """For routes that must stay behind a confirmed email (none of the AI routes since C3 (a′))."""
-    if not is_verified(user):
-        raise HTTPException(403, detail={"code": "email_unverified"})
-    return user
+# Since C3 (a′) no route is gated on a confirmed email: an unverified account runs on the small
+# `unverified` plan (entitlements), so routes gate on features and budgets instead.

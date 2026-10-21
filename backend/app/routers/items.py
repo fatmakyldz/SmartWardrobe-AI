@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..ai import analysis
 from ..ai.context import season_of
+from ..ai import AIError
 from ..ai.features import tagging
 from ..config import get_settings
 from ..db import get_db
@@ -33,9 +34,9 @@ def analyze(
     db: Session = Depends(get_db),
 ):
     """Store the photo and let the vision model pre-fill the tags. The user confirms with POST /items.
-    Since C3 (a′) an unverified account has the small `unverified` plan, so it tags its first pieces;
-    past its daily budget the gateway answers 429 budget_exceeded (the photo is still stored, the user
-    can fill the tags in by hand through the normal form)."""
+    Since C3 (a′) an unverified account has the small `unverified` plan, so it tags its first pieces.
+    Past the daily token budget the photo is still stored and comes back with default tags and
+    ai_skipped="budget_exceeded", so the user can fill them in by hand instead of losing the photo."""
     # Plain `def`: FastAPI runs it in the threadpool, so Pillow, the storage upload,
     # the DB commit and the model call never block the event loop.
     ent = entitlements(user, db)
@@ -47,8 +48,14 @@ def analyze(
 
     # The same photo sent twice within a minute (double tap, retry) is tagged once.
     same_photo = idempotency_key or f"{hashlib.sha256(small).hexdigest()}:{lang}"
-    out, _ = tagging.tag_image(small, lang, subject_id=user.id, tier=ent.model_tier,
-                               budget=UserBudget(user, ent), idempotency_key=same_photo)
+    try:
+        out, _ = tagging.tag_image(small, lang, subject_id=user.id, tier=ent.model_tier,
+                                   budget=UserBudget(user, ent), idempotency_key=same_photo)
+    except AIError as e:
+        if e.code != "budget_exceeded":
+            raise
+        return AnalyzeOut(image_key=key, image_url=get_storage().url(key), is_clothing=True,
+                          tags=Tags(category="top"), ai_skipped="budget_exceeded")
     tags = out.model_dump()
     is_clothing = tags.pop("is_clothing")
     return AnalyzeOut(image_key=key, image_url=get_storage().url(key), is_clothing=is_clothing, tags=Tags(**tags))

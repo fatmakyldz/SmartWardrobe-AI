@@ -117,10 +117,13 @@ def onboarding_lines(conn: sa.Connection, start: datetime, end: datetime) -> lis
     if not users:
         return lines
     ids = [u.id for u in users]
+    # AI outfits only (an edited suggestion still counts); outfits older than the account are the ones a
+    # claimed demo brought along and don't count as the account's first.
     first = dict(
         conn.execute(
             sa.select(Outfit.user_id, sa.func.min(Outfit.created_at))
-            .where(Outfit.user_id.in_(ids), Outfit.source == "ai")
+            .join(User, User.id == Outfit.user_id)
+            .where(Outfit.user_id.in_(ids), Outfit.source.in_(("ai", "ai_edited")), Outfit.created_at >= User.created_at)
             .group_by(Outfit.user_id)
         ).all()
     )

@@ -11,7 +11,9 @@ NOW = datetime(2026, 10, 19, 12, 0, tzinfo=timezone.utc)
 
 
 def _user(db, **kw) -> User:
-    kw.setdefault("email_verified_at", NOW)  # verified unless the test says otherwise (C3 (a′))
+    # Verified unless the test says otherwise: since C3 (a′) an unverified user is on the `unverified`
+    # plan, and these tests are about the free / premium / grant layers.
+    kw.setdefault("email_verified_at", NOW)
     u = User(email=f"{len(kw)}-{datetime.now().timestamp()}@example.com", password_hash="x", **kw)
     db.add(u)
     db.commit()

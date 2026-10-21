@@ -6,7 +6,7 @@ import { CloseIcon } from '@/components/icons';
 import { Button, Chip, Notice, Screen, T } from '@/components/ui';
 import { api, Palette, PALETTES, PRIORITIES, Priority, Style, STYLES, StylePatch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { setPendingStyle } from '@/lib/onboarding';
+import { clearPendingOnboarding, setPendingOnboarding } from '@/lib/onboarding';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
 import { space, usePalette } from '@/lib/theme';
@@ -32,13 +32,14 @@ export default function Onboarding() {
   /** "Start with my own pieces": sign up, then the first-pieces flow; the answers wait in memory and
    *  are saved right after the account exists (AuthForm). */
   function startOwn() {
-    setPendingStyle(profile ?? null);
-    router.push({ pathname: '/sign-up', params: { first: '1' } });
+    setPendingOnboarding(profile ?? null, true);
+    router.push('/sign-up');
   }
 
   async function start(skip: boolean) {
     setBusy(true);
     setError(null);
+    clearPendingOnboarding(); // the demo path: nothing waits for an account
     try {
       await signIn(await api.demo(lang, skip ? undefined : profile));
     } catch (e) {

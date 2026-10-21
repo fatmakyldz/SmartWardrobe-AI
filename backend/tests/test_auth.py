@@ -242,8 +242,8 @@ def test_unverified_accounts_get_the_small_plan_until_verified(client, unverifie
     assert client.post("/outfits/capsule", json={}, headers=unverified_auth).json()["detail"]["code"] == "feature_not_allowed"
 
     # 3 counted requests a day, then budget_exceeded; 5 pieces, then wardrobe_full
-    client.post("/outfits/suggest", json={}, headers=unverified_auth)
-    client.post("/outfits/suggest", json={}, headers=unverified_auth)
+    assert client.post("/outfits/suggest", json={}, headers=unverified_auth).status_code == 200
+    assert client.post("/outfits/suggest", json={}, headers=unverified_auth).status_code == 200
     r = client.post("/outfits/suggest", json={}, headers=unverified_auth)
     assert r.status_code == 429 and r.json()["detail"]["code"] == "budget_exceeded"
     with SessionLocal() as db:
@@ -261,13 +261,57 @@ def test_unverified_accounts_get_the_small_plan_until_verified(client, unverifie
     assert client.post("/outfits/suggest", json={}, headers=unverified_auth).status_code == 200  # free's 5, 3 spent
 
 
-def test_demo_accounts_need_no_verification(client):
+def test_demo_accounts_keep_their_own_plan(client):
+    from app.db import SessionLocal
+    from app.entitlements import entitlements
+    from app.models import User
     from app.ai.providers import FAKE
     from tests.helpers import answer
 
     FAKE.respond = answer()
     h = bearer(client.post("/auth/demo", json={}).json()["access"])
+    with SessionLocal() as db:
+        assert entitlements(db.query(User).filter(User.is_demo).one(), db).plan == "demo"  # not `unverified`
     assert client.post("/outfits/suggest", json={}, headers=h).status_code == 200
+
+
+def test_analyze_past_the_budget_keeps_the_photo_with_default_tags(client, unverified_auth, fake_ai):
+    from app.db import SessionLocal
+    from app.entitlements import consume
+    from app.models import User
+    from tests.test_api import png_bytes
+
+    with SessionLocal() as db:
+        uid = db.query(User).one().id
+        consume(db, uid, "tagging", tokens=25000)  # the unverified plan's whole day
+        db.commit()
+    r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=unverified_auth)
+    assert r.status_code == 200 and r.json()["ai_skipped"] == "budget_exceeded" and fake_ai.calls == []
+    assert client.post("/items", json={"image_key": r.json()["image_key"], "category": "top"},
+                       headers=unverified_auth).status_code == 201
+
+
+def test_stale_unverified_accounts_are_cleaned_up(client, unverified_auth, outbox):
+    from datetime import datetime, timedelta, timezone
+
+    from app.db import SessionLocal
+    from app.models import RefreshToken, User
+    from app.services.profile import cleanup_stale_unverified
+
+    now = datetime.now(timezone.utc)
+    with SessionLocal() as db:
+        u = db.query(User).one()
+        u.created_at = now - timedelta(days=20)
+        db.commit()
+        assert cleanup_stale_unverified(db, now, dry_run=True) == []  # its refresh token was used today
+        for t in db.query(RefreshToken).all():
+            t.created_at, t.last_used_at = now - timedelta(days=20), None
+        db.commit()
+        assert len(cleanup_stale_unverified(db, now, dry_run=True)) == 1
+        u = db.query(User).one()
+        u.email_verified_at = now
+        db.commit()
+        assert cleanup_stale_unverified(db, now) == []  # verified: never touched
 
 
 # ── password reset ────────────────────────────────────────────────────────

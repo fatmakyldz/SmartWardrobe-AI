@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
 
 import { CloseIcon } from '@/components/icons';
@@ -35,14 +35,11 @@ export default function NewItem() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reward, setReward] = useState<string | null>(null);
-  const [added, setAdded] = useState(0); // pieces saved in this visit (first mode counts to 3)
-  // Outfits possible before this save, to show the difference after it.
-  const before = useRef<number | null>(null);
-  useEffect(() => {
-    if (analysis.data && before.current === null) before.current = analysis.data.outfits_possible;
-  }, [analysis.data]);
+  const [added, setAdded] = useState(0); // pieces saved in this visit
+  const before = useRef<number | null>(null); // outfits possible before the last save
 
-  const count = (items.data?.length ?? 0);
+  const count = items.data?.length ?? 0;
+  const step = firstMode ? Math.min(count + 1, 3) : 0; // survives a reload: counted from the wardrobe
   const ready = (() => {
     const cats = new Set((items.data ?? []).map((i) => i.category));
     return cats.has('dress') || (cats.has('top') && cats.has('bottom'));
@@ -82,10 +79,11 @@ export default function NewItem() {
     if (!draft) return;
     setError(null);
     try {
+      const prev = before.current ?? analysis.data?.outfits_possible ?? 0;
       await create.mutateAsync({ ...draft.tags, image_key: draft.key });
       const fresh = await analysis.refetch();
       const now = fresh.data?.outfits_possible ?? 0;
-      const gained = now - (before.current ?? 0);
+      const gained = now - prev;
       before.current = now;
       const gap = fresh.data?.gaps.find((g) => g.code === 'missing_category');
       setReward(
@@ -99,7 +97,7 @@ export default function NewItem() {
       setDraft(null);
       setPreview(null);
       if (!firstMode) return; // normal mode: stay for the reward line, close is one tap away
-      if (added + 1 >= 3 && (ready || now > 0)) router.replace('/');
+      if (count + 1 >= 3 && now > 0) router.replace('/'); // three in and an outfit exists: show it
     } catch (e) {
       setError(errorText(e));
     }
@@ -111,7 +109,7 @@ export default function NewItem() {
     <Screen edges={['top', 'bottom']}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.md }}>
         <T variant="heading" accessibilityRole="header">
-          {firstMode ? t.first.title(Math.min(added + 1, 3)) : t.add.title}
+          {firstMode ? t.first.title(step) : t.add.title}
         </T>
         <Pressable accessibilityRole="button" accessibilityLabel={t.common.close} onPress={close} hitSlop={12}>
           <CloseIcon color={p.ink} />
@@ -152,9 +150,7 @@ export default function NewItem() {
           </T>
           {Platform.OS !== 'web' ? <Button label={t.add.camera} onPress={() => pick('camera')} /> : null}
           <Button label={t.add.library} kind={Platform.OS === 'web' ? 'primary' : 'secondary'} onPress={() => pick('library')} />
-          {firstMode && (ready || count >= 2) ? (
-            <Button label={t.first.enough} kind="ghost" onPress={() => router.replace('/')} />
-          ) : null}
+          {firstMode && ready ? <Button label={t.first.enough} kind="ghost" onPress={() => router.replace('/')} /> : null}
         </View>
       )}
 

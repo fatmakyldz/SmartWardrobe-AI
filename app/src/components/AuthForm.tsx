@@ -6,7 +6,7 @@ import { accessToken, api, ApiError, refreshSession } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
-import { takePendingStyle } from '@/lib/onboarding';
+import { clearPendingOnboarding, takePendingStyle } from '@/lib/onboarding';
 import { space, usePalette } from '@/lib/theme';
 
 import { CloseIcon } from './icons';
@@ -16,7 +16,7 @@ import { Button, Chip, Field, Notice, Screen, T } from './ui';
  * sign-in / sign-up, or "claim": sign-up from inside a demo account, carrying the demo's access token so
  * its style answers (and, with keepItems, the sample pieces and liked outfits) move to the new account.
  */
-export function AuthForm({ mode, firstPieces = false }: { mode: 'sign-in' | 'sign-up' | 'claim'; firstPieces?: boolean }) {
+export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' | 'claim' }) {
   const { t, lang } = useI18n();
   const p = usePalette();
   const { signIn } = useAuth();
@@ -44,13 +44,15 @@ export function AuthForm({ mode, firstPieces = false }: { mode: 'sign-in' | 'sig
       const res = isUp
         ? await api.register({ email: email.trim(), password, name: name.trim(), locale: lang, ...claim })
         : await api.login({ email: email.trim(), password });
-      await signIn(res);
       if (isUp && !isClaim) {
-        // Onboarding answers given before the account existed (C3 (a′): the account can use AI at once).
+        // Onboarding answers given before the account existed; saved before signIn flips the guard,
+        // so the first suggestion already carries them. The first-pieces flag is consumed by index.tsx.
         const pending = takePendingStyle();
         if (pending) await api.updateStyle(pending).catch(() => undefined);
-        if (firstPieces) router.replace({ pathname: '/item/new', params: { first: '1' } });
+      } else {
+        clearPendingOnboarding(); // sign-in or claim: whatever onboarding left behind is not for this account
       }
+      await signIn(res);
       if (isClaim) router.replace('/'); // still signed in, so the guard doesn't move us: go to Today
     } catch (e) {
       setError(errorText(e));

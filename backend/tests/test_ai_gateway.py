@@ -316,9 +316,19 @@ def test_token_budget_blocks_any_feature(client, auth):
         db.add(UsageCounter(user_id=uid, feature="suggest", period_start=datetime.now(timezone.utc).date(),
                             count=0, tokens=39_900))
         db.commit()
+    # Tagging past the budget keeps the photo and hands the tags to the user (AI-07c); the model is not called.
     r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=auth)
+    assert r.status_code == 200 and r.json()["ai_skipped"] == "budget_exceeded"
+    assert FAKE.calls == []
+    r = client.post("/outfits/suggest", json={}, headers=auth)
+    assert r.status_code in (400, 429)  # 400 wardrobe_incomplete comes first on an empty wardrobe
+    with SessionLocal() as db:
+        from app.models import Item
+        db.add_all([Item(user_id=uid, image_key=f"u/{uid.hex}/{c}.webp", category=c) for c in ("top", "bottom")])
+        db.commit()
+    r = client.post("/outfits/suggest", json={}, headers=auth)
     assert r.status_code == 429 and r.json()["detail"]["code"] == "budget_exceeded"
-    assert r.json()["detail"]["remaining"] == {"requests": None, "tokens": 100}
+    assert r.json()["detail"]["remaining"] == {"requests": 5, "tokens": 100}
     assert FAKE.calls == []
 
 
