@@ -8,9 +8,9 @@ from ..db import get_db
 from ..models import User
 from ..ratelimit import limiter
 from ..schemas import AuthOut, DemoIn, ForgotIn, LoginIn, RefreshIn, RegisterIn, ResetIn, TokenIn, UserOut
-from ..security import create_access_token, current_user, hash_password, verify_password
+from ..security import create_access_token, current_user, hash_password, user_from_access_token, verify_password
 from ..services import email, profile
-from ..services.demo import cleanup_expired_demos, create_demo_user
+from ..services.demo import claim_demo, cleanup_expired_demos, create_demo_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -62,9 +62,26 @@ def _send_verification(background: BackgroundTasks, db: Session, user: User) -> 
 @limiter.limit("10/hour")
 def register(request: Request, response: Response, body: RegisterIn, background: BackgroundTasks,
              db: Session = Depends(get_db)):
+    demo = None
+    if body.claim_demo_token:
+        # Checked before the account exists, so a stale demo token doesn't leave a half-made account.
+        demo = user_from_access_token(db, body.claim_demo_token)
+        if demo is None or not demo.is_demo:
+            raise HTTPException(400, detail={"code": "invalid_demo_token"})
     user = profile.create_user(db, body.email, body.password, body.name, body.locale)
+    claimed = None
+    if demo:
+        try:
+            claimed = claim_demo(db, demo, user, body.keep_demo_items)
+        except Exception:
+            # The account was committed by create_user: take it back, so a retry isn't email_taken.
+            db.rollback()
+            profile.delete_account(db, db.get(User, user.id))
+            raise
     _send_verification(background, db, user)
-    return _session(db, user, request, response)
+    out = _session(db, user, request, response)
+    out.claimed = claimed
+    return out
 
 
 @router.post("/login", response_model=AuthOut)
@@ -82,7 +99,7 @@ def login(request: Request, response: Response, body: LoginIn, db: Session = Dep
 def demo(request: Request, response: Response, body: DemoIn, db: Session = Depends(get_db)):
     """A fresh, private demo account with a sample wardrobe; deleted after DEMO_TTL_HOURS."""
     cleanup_expired_demos(db)
-    user = create_demo_user(db, body.locale)
+    user = create_demo_user(db, body.locale, body.style_profile.model_dump() if body.style_profile else None)
     return _session(db, user, request, response)
 
 

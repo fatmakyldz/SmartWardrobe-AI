@@ -46,9 +46,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (s: Session) => {
       setSession(s);
       await writeRefreshToken(s.refresh);
+      qc.clear(); // a claim swaps the account under a signed-in app: nothing cached may carry over
       setUser(s.user);
     },
-    [setUser],
+    [setUser, qc],
   );
 
   useEffect(() => {

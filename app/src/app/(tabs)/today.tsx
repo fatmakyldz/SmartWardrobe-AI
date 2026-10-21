@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, useWindowDimensions, View } from 'react-native';
 
 import { CityPicker } from '@/components/CityPicker';
@@ -10,7 +10,7 @@ import { api, Occasion, OCCASIONS, Outfit } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useErrorText } from '@/lib/errors';
 import { skyKey, useI18n } from '@/lib/i18n';
-import { useFeedback, useItems, useLatestOutfits, useSuggest } from '@/lib/queries';
+import { useFeedback, useItems, useLatestOutfits, useOutfits, useSuggest } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
 
 export default function Today() {
@@ -40,6 +40,20 @@ export default function Today() {
 
   const cats = new Set((items.data ?? []).map((i) => i.category));
   const ready = cats.has('dress') || (cats.has('top') && cats.has('bottom'));
+
+  // A demo account's first visit gets a suggestion without a tap (§10 step 2): once per account, and
+  // only while it has no outfit at all, so coming back to the tab doesn't spend another request.
+  const history = useOutfits(false, !!user?.is_demo);
+  const autoFor = useRef<string | null>(null);
+  const [autoShown, setAutoShown] = useState(false);
+  useEffect(() => {
+    if (!user?.is_demo || !ready || !history.isSuccess || history.data.length > 0) return;
+    if (autoFor.current === user.id || suggest.isPending) return;
+    autoFor.current = user.id;
+    setAutoShown(true);
+    suggest.mutate({ occasion: 'casual', note: '', lang });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.is_demo, user?.id, ready, history.isSuccess, history.data?.length]);
 
   async function pickCity(c: { city: string; lat: number; lon: number }) {
     setPickingCity(false);
@@ -138,6 +152,7 @@ export default function Today() {
       )}
 
       <View style={{ gap: space.xxl, marginTop: space.xxl }}>
+        {autoShown && outfits.length ? <Notice>{t.today.firstDemo}</Notice> : null}
         {outfits.map((o) => (
           <OutfitBoard
             key={o.id}

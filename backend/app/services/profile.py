@@ -76,7 +76,11 @@ def update_style(db: Session, user: User, patch: dict) -> dict:
     profile = dict(user.style_profile or {})
     if patch.get("answers") is not None:
         answers = dict(profile.get("answers") or {})
-        answers.update({k: v for k, v in patch["answers"].items() if v is not None})
+        for k, v in patch["answers"].items():  # exclude_unset upstream: a key given as None clears it
+            if v is None:
+                answers.pop(k, None)
+            else:
+                answers[k] = v
         profile["answers"] = answers
     for key in ("liked_colors", "disliked_colors", "styles", "avoid"):
         if patch.get(key) is not None:

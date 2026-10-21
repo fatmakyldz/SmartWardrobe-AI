@@ -97,12 +97,12 @@ Rollback: set `STORAGE_BACKEND=db` again — the `images` table is untouched unt
 
 | Method | Path | |
 |---|---|---|
-| POST | `/auth/register`, `/auth/login` | email + password → `{access, refresh, user}`; register also emails a verification link |
+| POST | `/auth/register`, `/auth/login` | email + password → `{access, refresh, user}`; register also emails a verification link. Register with `claim_demo_token` (a demo account's access token) moves that demo's style profile to the new account and deletes the demo; with `keep_demo_items: true` its 17 pieces (own picture copies), outfits and likes come too — the response's `claimed` says what moved. A bad or spent token is 400 `invalid_demo_token` and creates nothing |
 | POST | `/auth/refresh` | `{refresh}` (web: the `sw_refresh` cookie) → a new pair; the old refresh token is spent, and reusing a spent one revokes its whole family |
 | POST | `/auth/logout`, `/auth/logout-all` | this device / every device (`token_version++`, all refresh tokens revoked) |
 | POST | `/auth/verify`, `/auth/resend-verification` | `{token}` from the email / a new link (5 an hour) |
 | POST | `/auth/forgot`, `/auth/reset` | `{email}` → always 200 / `{token, password}` → new password, every session signed out |
-| POST | `/auth/demo` | private demo account with a 17-piece sample wardrobe (deleted after 24 h) |
+| POST | `/auth/demo` | `{locale, style_profile?}` → private demo account with a 17-piece sample wardrobe (deleted after 24 h); `style_profile` carries the onboarding answers (same shape as `PATCH /me/style`) so the first suggestion already uses them |
 | GET/PATCH/DELETE | `/me` | profile, city, language; DELETE removes the account and every photo |
 | GET/PATCH | `/me/style` | style preferences `{answers: {q1 style, q2 palettes, q3 priority}, liked_colors, disliked_colors, styles, avoid}` (fixed vocabularies) + the rule-based taste summary |
 | POST | `/items/analyze` | upload a photo → stored + AI-suggested tags |

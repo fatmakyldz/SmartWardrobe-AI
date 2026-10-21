@@ -40,7 +40,7 @@ def test_login_returns_a_15_minute_access_token_and_a_refresh_token(client):
     register(client)
     r = client.post("/auth/login", json={"email": "FATMA@example.com", "password": CREDS["password"]})
     body = r.json()
-    assert set(body) == {"access", "refresh", "user"} and body["refresh"]
+    assert set(body) == {"access", "refresh", "user", "claimed"} and body["refresh"]
     claims = jwt.decode(body["access"], options={"verify_signature": False})
     assert claims["exp"] - claims["iat"] == 15 * 60 and claims["tv"] == 0
     assert client.get("/me", headers=bearer(body["access"])).json()["email"] == "fatma@example.com"
