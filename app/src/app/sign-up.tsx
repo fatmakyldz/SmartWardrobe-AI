@@ -1,5 +1,8 @@
+import { useLocalSearchParams } from 'expo-router';
+
 import { AuthForm } from '@/components/AuthForm';
 
 export default function SignUp() {
-  return <AuthForm mode="sign-up" />;
+  const { first } = useLocalSearchParams<{ first?: string }>();
+  return <AuthForm mode="sign-up" firstPieces={first === '1'} />;
 }

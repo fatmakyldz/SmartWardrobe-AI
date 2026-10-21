@@ -73,11 +73,13 @@ def current_user(
 
 
 def is_verified(user: User) -> bool:
-    """AI features need a verified email (§14 C3); demo accounts are exempt."""
+    """Demo accounts count as verified. Since C3 (a′) an unverified account still gets the small
+    `unverified` plan (entitlements), so AI routes gate on features, not on this."""
     return user.is_demo or user.email_verified_at is not None
 
 
 def verified_user(user: User = Depends(current_user)) -> User:
+    """For routes that must stay behind a confirmed email (none of the AI routes since C3 (a′))."""
     if not is_verified(user):
         raise HTTPException(403, detail={"code": "email_unverified"})
     return user

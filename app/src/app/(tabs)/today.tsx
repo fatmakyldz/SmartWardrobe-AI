@@ -44,19 +44,20 @@ export default function Today() {
   const cats = new Set((items.data ?? []).map((i) => i.category));
   const ready = cats.has('dress') || (cats.has('top') && cats.has('bottom'));
 
-  // A demo account's first visit gets a suggestion without a tap (§10 step 2): once per account, and
+  // The first outfit comes without a tap (§10 step 2, and the first-pieces flow): once per account,
   // only while it has no outfit at all, so coming back to the tab doesn't spend another request.
-  const history = useOutfits(false, !!user?.is_demo);
+  // (The history list is the same query Saved uses; 10-minute stale time, so it's one fetch.)
+  const history = useOutfits(false, !!user);
   const autoFor = useRef<string | null>(null);
   const [autoShown, setAutoShown] = useState(false);
   useEffect(() => {
-    if (!user?.is_demo || !ready || !history.isSuccess || history.data.length > 0) return;
+    if (!user || !ready || !history.isSuccess || history.data.length > 0) return;
     if (autoFor.current === user.id || suggest.isPending) return;
     autoFor.current = user.id;
     setAutoShown(true);
     suggest.mutate({ occasion: 'casual', note: '', lang });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.is_demo, user?.id, ready, history.isSuccess, history.data?.length]);
+  }, [user?.id, ready, history.isSuccess, history.data?.length]);
 
   async function pickCity(c: { city: string; lat: number; lon: number }) {
     setPickingCity(false);
@@ -178,7 +179,7 @@ export default function Today() {
       )}
 
       <View style={{ gap: space.xxl, marginTop: space.xxl }}>
-        {autoShown && outfits.length ? <Notice>{t.today.firstDemo}</Notice> : null}
+        {autoShown && outfits.length && user?.is_demo ? <Notice>{t.today.firstDemo}</Notice> : null}
         {worn.isError ? <Notice tone="error">{errorText(worn.error)}</Notice> : null}
         {outfits.map((o) => (
           <OutfitBoard

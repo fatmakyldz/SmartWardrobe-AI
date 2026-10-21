@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
 
 import { CloseIcon } from '@/components/icons';
@@ -10,22 +10,49 @@ import { Button, Notice, Screen, T } from '@/components/ui';
 import { api, imageSource, PickedImage, Tags } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
-import { useCreateItem } from '@/lib/queries';
+import { useAnalysis, useCreateItem, useItems } from '@/lib/queries';
 import { radius, space, usePalette } from '@/lib/theme';
 
-const close = () => (router.canGoBack() ? router.back() : router.replace('/wardrobe'));
 
 type Draft = { key: string; url: string; isClothing: boolean; aiSkipped: boolean; tags: Tags };
 
+/**
+ * One photo → AI tags → the user confirms → saved. With `?first=1` (right after sign-up) it chains:
+ * three pieces in a row, a running count, then straight to Today for the first outfit. In both modes
+ * every save shows what it unlocked ("+6 outfits"), from the deterministic analysis — no AI request.
+ */
 export default function NewItem() {
   const p = usePalette();
   const { t, lang } = useI18n();
   const errorText = useErrorText();
   const create = useCreateItem();
+  const { first } = useLocalSearchParams<{ first?: string }>();
+  const firstMode = first === '1';
+  const items = useItems();
+  const analysis = useAnalysis();
   const [preview, setPreview] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reward, setReward] = useState<string | null>(null);
+  const [added, setAdded] = useState(0); // pieces saved in this visit (first mode counts to 3)
+  // Outfits possible before this save, to show the difference after it.
+  const before = useRef<number | null>(null);
+  useEffect(() => {
+    if (analysis.data && before.current === null) before.current = analysis.data.outfits_possible;
+  }, [analysis.data]);
+
+  const count = (items.data?.length ?? 0);
+  const ready = (() => {
+    const cats = new Set((items.data ?? []).map((i) => i.category));
+    return cats.has('dress') || (cats.has('top') && cats.has('bottom'));
+  })();
+
+  function close() {
+    if (firstMode) return router.replace('/');
+    if (router.canGoBack()) router.back();
+    else router.replace('/wardrobe');
+  }
 
   async function pick(source: 'camera' | 'library') {
     setError(null);
@@ -56,7 +83,23 @@ export default function NewItem() {
     setError(null);
     try {
       await create.mutateAsync({ ...draft.tags, image_key: draft.key });
-      close();
+      const fresh = await analysis.refetch();
+      const now = fresh.data?.outfits_possible ?? 0;
+      const gained = now - (before.current ?? 0);
+      before.current = now;
+      const gap = fresh.data?.gaps.find((g) => g.code === 'missing_category');
+      setReward(
+        gained > 0
+          ? t.first.unlocked(gained)
+          : now === 0 && gap?.category
+            ? t.first.starts(t.categories[gap.category].toLocaleLowerCase(lang))
+            : t.first.noNew,
+      );
+      setAdded((n) => n + 1);
+      setDraft(null);
+      setPreview(null);
+      if (!firstMode) return; // normal mode: stay for the reward line, close is one tap away
+      if (added + 1 >= 3 && (ready || now > 0)) router.replace('/');
     } catch (e) {
       setError(errorText(e));
     }
@@ -68,7 +111,7 @@ export default function NewItem() {
     <Screen edges={['top', 'bottom']}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.md }}>
         <T variant="heading" accessibilityRole="header">
-          {t.add.title}
+          {firstMode ? t.first.title(Math.min(added + 1, 3)) : t.add.title}
         </T>
         <Pressable accessibilityRole="button" accessibilityLabel={t.common.close} onPress={close} hitSlop={12}>
           <CloseIcon color={p.ink} />
@@ -103,11 +146,15 @@ export default function NewItem() {
         </View>
       ) : (
         <View style={{ marginTop: space.xl, gap: space.md }}>
+          {reward ? <Notice>{reward}</Notice> : null}
           <T variant="body" color="inkSoft">
-            {t.add.tip}
+            {firstMode && !added ? t.first.intro : t.add.tip}
           </T>
           {Platform.OS !== 'web' ? <Button label={t.add.camera} onPress={() => pick('camera')} /> : null}
           <Button label={t.add.library} kind={Platform.OS === 'web' ? 'primary' : 'secondary'} onPress={() => pick('library')} />
+          {firstMode && (ready || count >= 2) ? (
+            <Button label={t.first.enough} kind="ghost" onPress={() => router.replace('/')} />
+          ) : null}
         </View>
       )}
 

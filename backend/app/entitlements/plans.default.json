@@ -6,7 +6,9 @@
                 "features": ["tagging", "suggest", "intent", "user_outfits", "capsule"], "model_tier": "premium",
                 "history_limit": 500},
     "demo": {"max_items": 17, "daily_ai_requests": 5, "daily_ai_tokens": 40000,
-             "features": ["suggest", "intent"], "model_tier": "standard", "history_limit": 10}
+             "features": ["suggest", "intent"], "model_tier": "standard", "history_limit": 10},
+    "unverified": {"max_items": 5, "daily_ai_requests": 3, "daily_ai_tokens": 25000,
+                   "features": ["tagging", "suggest", "intent"], "model_tier": "standard", "history_limit": 10}
   },
   "request_counted_features": ["suggest", "intent", "capsule_explain"]
 }

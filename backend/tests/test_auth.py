@@ -218,22 +218,47 @@ def test_resend_verification_replaces_the_link_and_is_limited(client, outbox):
     assert client.post("/auth/verify", json={"token": token_from(outbox, "verify_email")}).status_code == 200
 
 
-def test_unverified_accounts_get_the_wardrobe_but_not_ai(client, unverified_auth, fake_ai):
+def test_unverified_accounts_get_the_small_plan_until_verified(client, unverified_auth, fake_ai):
+    """C3 (a′): before the email is confirmed an account tags its first pieces and sees a first outfit on
+    the `unverified` plan (5 pieces, 3 requests/day); confirming the email moves it to free."""
+    from app.db import SessionLocal
+    from app.entitlements import entitlements
+    from app.models import User
+    from tests.helpers import answer
     from tests.test_api import png_bytes
 
-    called = []
-    fake_ai.respond = lambda call, model: called.append(model) or {"is_clothing": True, "category": "dress"}
-    r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=unverified_auth)
-    assert r.status_code == 200 and r.json()["ai_skipped"] == "email_unverified" and called == []
-    saved = client.post("/items", json={"image_key": r.json()["image_key"], "category": "top"}, headers=unverified_auth)
-    assert saved.status_code == 201
+    with SessionLocal() as db:
+        ent = entitlements(db.query(User).one(), db)
+    assert (ent.plan, ent.max_items, ent.daily_ai_requests) == ("unverified", 5, 3)
+    assert ent.allowed_features == {"tagging", "suggest", "intent"}
 
+    fake_ai.respond = lambda call, model: {"is_clothing": True, "category": "dress"} if call.schema_name == "tagging" \
+        else answer("dress")(call, model)
+    r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=unverified_auth)
+    assert r.status_code == 200 and r.json()["ai_skipped"] is None and r.json()["tags"]["category"] == "dress"
+    assert client.post("/items", json={"image_key": r.json()["image_key"], "category": "dress"},
+                       headers=unverified_auth).status_code == 201
+    assert client.post("/outfits/suggest", json={}, headers=unverified_auth).status_code == 200  # the first outfit
+    assert client.post("/outfits/capsule", json={}, headers=unverified_auth).json()["detail"]["code"] == "feature_not_allowed"
+
+    # 3 counted requests a day, then budget_exceeded; 5 pieces, then wardrobe_full
+    client.post("/outfits/suggest", json={}, headers=unverified_auth)
+    client.post("/outfits/suggest", json={}, headers=unverified_auth)
     r = client.post("/outfits/suggest", json={}, headers=unverified_auth)
-    assert r.status_code == 403 and r.json()["detail"] == {"code": "email_unverified"}
+    assert r.status_code == 429 and r.json()["detail"]["code"] == "budget_exceeded"
+    with SessionLocal() as db:
+        from app.models import Item
+        uid = db.query(User).one().id
+        db.add_all([Item(user_id=uid, image_key=f"u/{uid.hex}/{n}.webp", category="top") for n in range(4)])
+        db.commit()
+    r = client.post("/items", json={"image_key": f"u/{uid.hex}/x.webp", "category": "top"}, headers=unverified_auth)
+    assert r.json()["detail"]["code"] == "wardrobe_full"
 
     verify_email("fatma@example.com")
-    r = client.post("/items/analyze", files={"image": ("d.png", png_bytes(), "image/png")}, headers=unverified_auth)
-    assert r.json()["ai_skipped"] is None and r.json()["tags"]["category"] == "dress" and called
+    with SessionLocal() as db:
+        ent = entitlements(db.query(User).one(), db)
+    assert (ent.plan, ent.max_items, ent.daily_ai_requests) == ("free", 50, 5)
+    assert client.post("/outfits/suggest", json={}, headers=unverified_auth).status_code == 200  # free's 5, 3 spent
 
 
 def test_demo_accounts_need_no_verification(client):

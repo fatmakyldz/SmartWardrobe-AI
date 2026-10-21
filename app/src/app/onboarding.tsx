@@ -6,6 +6,7 @@ import { CloseIcon } from '@/components/icons';
 import { Button, Chip, Notice, Screen, T } from '@/components/ui';
 import { api, Palette, PALETTES, PRIORITIES, Priority, Style, STYLES, StylePatch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { setPendingStyle } from '@/lib/onboarding';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
 import { space, usePalette } from '@/lib/theme';
@@ -26,14 +27,20 @@ export default function Onboarding() {
   const [error, setError] = useState<string | null>(null);
 
   const answered = (q1 ? 1 : 0) + (q2.length ? 1 : 0) + (q3 ? 1 : 0);
+  const profile: StylePatch | undefined = answered === 0 ? undefined : { answers: { q1, q2: q2.length ? q2 : null, q3 } };
+
+  /** "Start with my own pieces": sign up, then the first-pieces flow; the answers wait in memory and
+   *  are saved right after the account exists (AuthForm). */
+  function startOwn() {
+    setPendingStyle(profile ?? null);
+    router.push({ pathname: '/sign-up', params: { first: '1' } });
+  }
 
   async function start(skip: boolean) {
     setBusy(true);
     setError(null);
     try {
-      const profile: StylePatch | undefined =
-        skip || answered === 0 ? undefined : { answers: { q1, q2: q2.length ? q2 : null, q3 } };
-      await signIn(await api.demo(lang, profile));
+      await signIn(await api.demo(lang, skip ? undefined : profile));
     } catch (e) {
       setError(errorText(e));
       setBusy(false);
@@ -103,11 +110,15 @@ export default function Onboarding() {
 
       <View style={{ gap: space.md, marginTop: space.xxl }}>
         {error ? <Notice tone="error">{error}</Notice> : null}
-        <Button label={t.onboarding.go} onPress={() => start(false)} loading={busy} />
-        <Button label={t.onboarding.skip} kind="ghost" onPress={() => start(true)} disabled={busy} />
+        <Button label={t.onboarding.own} onPress={startOwn} disabled={busy} />
+        <T variant="small" color="muted" style={{ textAlign: 'center' }}>
+          {t.onboarding.ownHint}
+        </T>
+        <Button label={t.onboarding.go} kind="secondary" onPress={() => start(false)} loading={busy} />
         <T variant="small" color="muted" style={{ textAlign: 'center' }}>
           {t.welcome.demoNote}
         </T>
+        <Button label={t.onboarding.skip} kind="ghost" onPress={() => start(true)} disabled={busy} />
       </View>
     </Screen>
   );

@@ -425,6 +425,7 @@ Kilitli kararlardan hiçbiri mevcut kodla **teknik olarak çakışmıyor**; aşa
 - C1 → (a): canlı değil; yine de migration öncesi Neon'da `SELECT count(*) FROM users` zorunlu; test kullanıcısı varsa veri korunur, doğrulama davranışı lansman öncesi olduğu için sorun değil.
 - C2 → Resend (ücretsiz katman: aylık 3.000 / günlük 100 e-posta; gerekirse Pro).
 - C3 → (a): gardırop serbest, AI isteği doğrulama ister; demo hesaplarda AI doğrulamasız çalışır.
+  - **(a′) revizyon, 21 Eki 2026 (AI-07c):** doğrulanmamış hesap artık küçük bir `unverified` planında çalışır — `max_items 5, daily_ai_requests 3, daily_ai_tokens 25000, features: tagging + suggest + intent`; abonelik ve grant'ler doğrulamaya kadar uygulanmaz, doğrulanınca `free`. Neden: onboarding'in amacı kullanıcının e-posta doğrulamasından **önce**, kendi 3–5 parçasıyla ilk gerçek kombini görmesi (time-to-first-outfit hedefi < 3 dk); (a) bu anı posta kutusuna bağlıyordu. Kötüye kullanım yüzeyi demo hesapla aynı (e-postasız 5 öneri/gün zaten vardı), IP bazlı rate limit'ler değişmedi. `scripts/ai_report.py` TTFO ve unverified → verified dönüşümünü raporlar. İlk kombinden sonra app "hesabını doğrula, gardırobunu büyüt" yönlendirmesi gösterir.
 - C4 → (a): her yanıtta taze 15 dk presigned URL, app `staleTime` 10 dk.
 - C5 → (a): demo görselleri paylaşımlı.
 - C6 → (a): tagging'de Groq vision fallback, `fallback_from` ile işaretli.

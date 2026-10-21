@@ -11,6 +11,7 @@ NOW = datetime(2026, 10, 19, 12, 0, tzinfo=timezone.utc)
 
 
 def _user(db, **kw) -> User:
+    kw.setdefault("email_verified_at", NOW)  # verified unless the test says otherwise (C3 (a′))
     u = User(email=f"{len(kw)}-{datetime.now().timestamp()}@example.com", password_hash="x", **kw)
     db.add(u)
     db.commit()
@@ -25,9 +26,21 @@ def _grant(db, user, **kw):
 
 def test_plan_values_match_the_design():
     plans = plans_config()["plans"]
-    assert {k: (p["max_items"], p["daily_ai_requests"], p["daily_ai_tokens"]) for k, p in plans.items()} == {
+    assert {k: (p["max_items"], p["daily_ai_requests"], p["daily_ai_tokens"]) for k, p in plans.items() if k != "unverified"} == {
         "free": (50, 5, 40000), "premium": (300, 60, 600000), "demo": (17, 5, 40000)}
     assert "tagging" not in plans["demo"]["features"]
+
+
+def test_unverified_accounts_get_the_unverified_plan_and_no_grants():
+    with SessionLocal() as db:
+        u = _user(db, email_verified_at=None)
+        _grant(db, u, plan_override="premium")
+        ent = entitlements(u, db, NOW)
+        assert (ent.plan, ent.max_items, ent.daily_ai_requests) == ("unverified", 5, 3)
+        assert ent.allowed_features == {"tagging", "suggest", "intent"}
+        u.email_verified_at = NOW
+        db.commit()
+        assert entitlements(u, db, NOW).plan == "premium"  # grants apply once verified
 
 
 def test_base_plan_and_demo():

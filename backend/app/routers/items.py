@@ -14,7 +14,7 @@ from ..entitlements import UserBudget, entitlements, require_feature
 from ..models import User
 from ..ratelimit import limiter
 from ..schemas import AnalyzeOut, GapOut, ItemIn, ItemOut, ItemUpdate, Tags, WardrobeAnalysisOut
-from ..security import current_user, is_verified
+from ..security import current_user
 from ..serialize import item_out
 from ..services import images, orchestration, wardrobe
 from ..storage import get_storage
@@ -33,8 +33,9 @@ def analyze(
     db: Session = Depends(get_db),
 ):
     """Store the photo and let the vision model pre-fill the tags. The user confirms with POST /items.
-    Without a verified email the photo is still stored (the wardrobe is open, §14 C3) but the model is
-    not called: empty tags come back with ai_skipped="email_unverified" for the user to fill in."""
+    Since C3 (a′) an unverified account has the small `unverified` plan, so it tags its first pieces;
+    past its daily budget the gateway answers 429 budget_exceeded (the photo is still stored, the user
+    can fill the tags in by hand through the normal form)."""
     # Plain `def`: FastAPI runs it in the threadpool, so Pillow, the storage upload,
     # the DB commit and the model call never block the event loop.
     ent = entitlements(user, db)
@@ -43,9 +44,6 @@ def analyze(
     s = get_settings()
     key, small = images.store_upload(db, user, image.file.read(s.max_upload_mb * 1024 * 1024 + 1), s.max_upload_mb)
     lang = "tr" if lang == "tr" else "en"
-    if not is_verified(user):
-        return AnalyzeOut(image_key=key, image_url=get_storage().url(key), is_clothing=True,
-                          tags=Tags(category="top"), ai_skipped="email_unverified")
 
     # The same photo sent twice within a minute (double tap, retry) is tagged once.
     same_photo = idempotency_key or f"{hashlib.sha256(small).hexdigest()}:{lang}"
