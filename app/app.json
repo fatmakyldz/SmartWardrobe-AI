@@ -60,7 +60,7 @@
       [
         "@sentry/react-native/expo",
         {
-          "organization": "fomertech",
+          "organization": "fomer",
           "project": "smartwardrobe-app",
           "url": "https://sentry.io/",
           "disableAutoUpload": true
