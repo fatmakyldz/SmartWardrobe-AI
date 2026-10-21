@@ -7,7 +7,7 @@ import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
 import { CloseIcon } from '@/components/icons';
 import { TagEditor } from '@/components/TagEditor';
 import { Button, Notice, Screen, T } from '@/components/ui';
-import { api, Category, imageSource, PickedImage, Tags } from '@/lib/api';
+import { api, CATEGORIES, Category, imageSource, PickedImage, Tags } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
 import { useAnalysis, useCreateItem, useItems } from '@/lib/queries';
@@ -147,7 +147,11 @@ export default function NewItem() {
         <View style={{ marginTop: space.xl, gap: space.md }}>
           {reward ? <Notice>{reward}</Notice> : null}
           <T variant="body" color="inkSoft">
-            {firstMode && !added ? t.first.intro : hint && !added ? t.add.forCategory(t.categories[hint as Category]) : t.add.tip}
+            {firstMode && !added
+              ? t.first.intro
+              : hint && !added && (CATEGORIES as readonly string[]).includes(hint)
+                ? t.add.forCategory(t.categories[hint as Category])
+                : t.add.tip}
           </T>
           {Platform.OS !== 'web' ? <Button label={t.add.camera} onPress={() => pick('camera')} /> : null}
           <Button label={t.add.library} kind={Platform.OS === 'web' ? 'primary' : 'secondary'} onPress={() => pick('library')} />

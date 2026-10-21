@@ -222,7 +222,7 @@ const en = {
     aiSkipped: 'Fill in the details yourself for now; the AI could not tag this one.',
     check: 'Worth a check',
     checkHint: (n: number) => (n === 1 ? 'The AI wasn’t sure about one detail — marked below.' : `The AI wasn’t sure about ${n} details — marked below.`),
-    forCategory: (category: string) => `Photograph ${category}.`,
+    forCategory: (category: string) => `Photograph ${withArticle(category)}.`,
     save: 'Save to wardrobe',
     retake: 'Use another photo',
   },
@@ -414,7 +414,7 @@ const tr: Dict = {
     nudge: (code, category, occasion, piece) =>
       ({
         missing_category: `${category} olmadan hiçbir şey kombin olmuyor.`,
-        occasion_uncovered: `Uygun bir ${category.toLocaleLowerCase('tr')}, ${occasion} için bir şeyler verir.`,
+        occasion_uncovered: `Uygun bir ${category.toLocaleLowerCase('tr')} olsa ${occasion} için de bir kombinin olur.`,
         season_uncovered: `Bu mevsime uygun bir ${category.toLocaleLowerCase('tr')} çok şey açar.`,
         few_partners: `${piece} sahip olduğun yalnız bir şeyle gidiyor. Aynı ayarda bir ${category.toLocaleLowerCase('tr')} daha çok kombin açar.`,
         orphan_items: `${piece} henüz hiçbir şeyle gitmiyor. Ona uyan bir ${category.toLocaleLowerCase('tr')} bunu çözer.`,
@@ -522,7 +522,7 @@ const tr: Dict = {
     aiSkipped: 'Şimdilik bilgileri sen doldur; yapay zekâ bu fotoğrafı etiketleyemedi.',
     check: 'Kontrol et',
     checkHint: (n) => `Yapay zekâ ${n} ayrıntıdan emin değildi — aşağıda işaretli.`,
-    forCategory: (category) => `${category} fotoğrafla.`,
+    forCategory: (category) => `Bir ${category.toLocaleLowerCase('tr')} fotoğrafla.`,
     save: 'Gardıroba kaydet',
     retake: 'Başka fotoğraf seç',
   },

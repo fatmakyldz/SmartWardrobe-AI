@@ -55,7 +55,7 @@ class TaggingOut(BaseModel):
             "warmth": one_to_five,
             "formality": one_to_five,
             "seasons": {"type": "array", "items": {"type": "string", "enum": SEASONS}},
-            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            "confidence": {"type": "number"},  # 0-1 by the prompt; clamped in _confidence (strict schemas take no bounds)
             "uncertain": {"type": "array", "items": {"type": "string", "enum": TAG_FIELDS}},
         }
         return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}

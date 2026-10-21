@@ -160,9 +160,16 @@ def test_few_partners_names_the_piece_and_the_category_to_add():
          item("bottom", 3, formality=1, colors=("olive",)), item("top", 4, formality=1, colors=("white",)),
          item("shoes", 5), item("shoes", 6, formality=3)]
     gaps = [g for g in analyze(w, "spring").gaps if g.code == "few_partners"]
-    assert {(g.item_ids, g.category) for g in gaps} >= {((item("top", 1).id,), "bottom"), ((item("bottom", 2).id,), "top")}
+    # Every piece here has exactly one partner; the two newest are reported (FEW_PARTNERS_MAX), each
+    # pointing at the category that would give it more.
+    assert [(g.item_ids, g.category) for g in gaps] == [((item("top", 4).id,), "bottom"), ((item("bottom", 3).id,), "top")]
     # An orphan is reported as an orphan, not as "few partners"; a piece with two partners is fine.
     w2 = [item("top", 1, formality=5, colors=("gold",)), item("top", 2), item("bottom", 3), item("bottom", 4), item("shoes", 5)]
     codes2 = {(g.code, g.item_ids) for g in analyze(w2, "spring").gaps}
     assert ("orphan_items", (item("top", 1).id,)) in codes2
     assert not any(c == "few_partners" and item("top", 2).id in ids for c, ids in codes2)
+    # Outerwear is never a few_partners piece (it goes over whole outfits), and at most two such gaps.
+    w3 = [item("outerwear", 9, formality=3)] + [item("top", n, formality=n % 2 + 2, colors=("red",)) for n in range(1, 6)]
+    w3 += [item("bottom", 7, formality=2, colors=("red",)), item("bottom", 8, formality=4, colors=("red",)), item("shoes", 10)]
+    few = [g for g in analyze(w3, "spring").gaps if g.code == "few_partners"]
+    assert 1 <= len(few) <= 2 and all(byid.category != "outerwear" for g in few for byid in w3 if byid.id in g.item_ids)

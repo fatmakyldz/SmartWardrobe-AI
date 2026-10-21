@@ -45,7 +45,9 @@ export default function Today() {
   const ready = cats.has('dress') || (cats.has('top') && cats.has('bottom'));
   // Progressive wardrobe: one nudge at a time, deterministic, no AI request. Demo wardrobes are complete.
   const analysis = useAnalysis(!!user && !user.is_demo && ready);
-  const nudge = ready ? pickNudge(analysis.data?.gaps ?? [], items.data ?? []) : null; // below 'ready' the incomplete notice says it all
+  // Same condition as `enabled`: the query key is shared with the analysis screen, so a demo user could
+  // otherwise see cached gaps here. Below 'ready' the incomplete notice says it all.
+  const nudge = ready && user && !user.is_demo ? pickNudge(analysis.data?.gaps ?? [], items.data ?? []) : null;
 
   // The first outfit comes without a tap (§10 step 2, and the first-pieces flow): once per account,
   // only while it has no outfit at all, so coming back to the tab doesn't spend another request.
@@ -236,10 +238,13 @@ function rank(g: Gap): number {
 
 function pickNudge(gaps: Gap[], items: Item[]): Nudge | null {
   const sorted = [...gaps].sort((a, b) => rank(a) - rank(b));
-  const gap = sorted.find((g) => NUDGE_ORDER.includes(g.code));
-  if (!gap) return null;
-  const piece = gap.item_ids.length ? (items.find((i) => i.id === gap.item_ids[0]) ?? null) : null;
-  return { gap, piece };
+  for (const gap of sorted) {
+    if (!NUDGE_ORDER.includes(gap.code)) continue;
+    const piece = gap.item_ids.length ? (items.find((i) => i.id === gap.item_ids[0]) ?? null) : null;
+    if (gap.item_ids.length && !piece) continue; // the piece isn't in the list yet (stale after a delete)
+    return { gap, piece };
+  }
+  return null;
 }
 
 function nudgeText(n: Nudge, t: ReturnType<typeof useI18n>['t'], lang: string): string {
