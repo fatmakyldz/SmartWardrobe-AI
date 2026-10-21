@@ -54,7 +54,7 @@ def test_create_user_outfit(client, auth):
     assert [i["id"] for i in body["items"]] == ids and body["title"] == "Monday" and body["occasion"] == "work"
     with SessionLocal() as db:
         o = db.get(Outfit, uuid.UUID(body["id"]))
-        assert o.source == "user" and o.item_ids == ids and [str(oi.item_id) for oi in o.outfit_items] == ids
+        assert o.source == "user" and [str(oi.item_id) for oi in o.outfit_items] == ids
 
 
 @pytest.mark.parametrize("pick, code", [
@@ -100,7 +100,7 @@ def test_editing_a_suggestion_makes_it_ai_edited(client, auth):
                                           headers=auth).json()["items"]] == swapped
     with SessionLocal() as db:
         o = db.get(Outfit, uuid.UUID(outfit["id"]))
-        assert o.source == "ai_edited" and o.item_ids == swapped
+        assert o.source == "ai_edited"
         assert [(oi.position, str(oi.item_id)) for oi in o.outfit_items] == list(enumerate(swapped))
     other = _demo(client)
     assert client.patch(f"/outfits/{outfit['id']}/items", json={"item_ids": swapped}, headers=other).status_code in (403, 404)
@@ -259,24 +259,15 @@ def test_summary_refreshes_every_ten_events_or_after_a_week(client):
 
 # ── read side ───────────────────────────────────────────────────────────
 
-def test_outfits_read_outfit_items_and_fall_back_to_item_ids(client, auth):
+def test_outfits_are_read_from_outfit_items(client, auth):
     w = _registered_with_wardrobe(client, auth)
-    ids = [w["dress"][0]["id"], w["shoes"][0]["id"]]
-    with SessionLocal() as db:
-        u = db.query(User).one()
-        db.add(Outfit(user_id=u.id, occasion="casual", item_ids=ids, title="before 0002",
-                      created_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))  # no outfit_items rows
-        db.commit()
     made = client.post("/outfits", json={"item_ids": [w["top"][0]["id"], w["bottom"][0]["id"]]}, headers=auth).json()
-    history = client.get("/outfits", headers=auth).json()
-    assert [o["title"] for o in history] == ["", "before 0002"]
-    assert [i["id"] for i in history[1]["items"]] == ids  # legacy row served from item_ids
+    assert [i["id"] for i in client.get("/outfits", headers=auth).json()[0]["items"]] == [w["top"][0]["id"], w["bottom"][0]["id"]]
     with SessionLocal() as db:  # outfit_items is the source: change it and the response follows
         o = db.get(Outfit, uuid.UUID(made["id"]))
-        o.item_ids = []
+        o.outfit_items[0].position, o.outfit_items[1].position = 1, 0
         db.commit()
-    assert [i["id"] for i in client.get("/outfits", headers=auth).json()[0]["items"]] == [
-        w["top"][0]["id"], w["bottom"][0]["id"]]
+    assert [i["id"] for i in client.get("/outfits", headers=auth).json()[0]["items"]] == [w["bottom"][0]["id"], w["top"][0]["id"]]
 
 
 def test_vocab_endpoint_is_public_and_matches():

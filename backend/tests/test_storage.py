@@ -15,12 +15,9 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import Item, StoredImage, User, WardrobeImage
+from app.models import Item, User, WardrobeImage
 from app.services import images
-from app.storage import DbStorage, get_storage
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import migrate_images_to_r2  # noqa: E402
+from app.storage import LocalStorage, get_storage
 
 BUCKET = "smartwardrobe-media"
 TAGS = {"is_clothing": True, "category": "top"}
@@ -116,7 +113,7 @@ def test_analyze_writes_an_orphan_row_that_create_attaches(client, auth, fake_ai
     assert client.delete(f"/items/{item['id']}", headers=auth).status_code == 204
     assert wi(key) is None
     with SessionLocal() as db:
-        assert db.get(StoredImage, key) is None
+        assert not get_storage().exists(db, key)
 
 
 def test_failed_bucket_delete_leaves_an_orphan_for_cleanup(client, auth, s3, fake_ai):
@@ -158,12 +155,12 @@ def test_cleanup_picks_up_a_failed_delete_a_day_later(client, auth, fake_ai):
     key = upload(client, auth)
     item = client.post("/items", json={"image_key": key, "category": "top"}, headers=auth).json()
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(DbStorage, "delete", lambda self, db, keys: (_ for _ in ()).throw(RuntimeError("down")))
+        mp.setattr(LocalStorage, "delete", lambda self, db, keys: (_ for _ in ()).throw(RuntimeError("down")))
         client.delete(f"/items/{item['id']}", headers=auth)
     with SessionLocal() as db:
         assert images.cleanup_orphans(db).orphan_rows == []  # uploaded just now
         assert images.cleanup_orphans(db, now=datetime.now(timezone.utc) + timedelta(hours=25)).orphan_rows == [key]
-        assert db.get(StoredImage, key) is None and db.get(WardrobeImage, key) is None
+        assert not get_storage().exists(db, key) and db.get(WardrobeImage, key) is None
 
 
 def test_reconcile_both_ways(client, auth, s3, fake_ai):
@@ -267,49 +264,26 @@ def test_account_deletion_survives_a_bucket_outage(client, auth, s3, fake_ai, mo
         assert images.reconcile(db, now=datetime.now(timezone.utc) + timedelta(hours=25)).stray_objects == [key]
 
 
-# ── scripts/migrate_images_to_r2.py ───────────────────────────────────────
+# ── LocalStorage ──────────────────────────────────────────────────────────
 
-def test_migrate_images_to_r2(client, auth, fake_ai):
-    fake_ai.respond = lambda call, model: TAGS
-    # db mode, as production is today: a saved item, an unsaved upload, a pre-05a blob without a row,
-    # shared demo pictures, and a blob of a user who no longer exists
-    saved = upload(client, auth)
-    client.post("/items", json={"image_key": saved, "category": "top"}, headers=auth)
-    unsaved = upload(client, auth)
-    client.post("/auth/demo", json={})
+def test_local_storage_round_trip_and_key_safety(tmp_path):
+    st = LocalStorage(tmp_path)
     with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.is_demo.is_(False)))
-        legacy = f"u/{user.id.hex}/legacy.webp"
-        db.add(StoredImage(key=legacy, data=webp(), content_type="image/webp"))
-        db.add(Item(user_id=user.id, image_key=legacy, category="bottom"))
-        db.add(StoredImage(key=f"u/{uuid.uuid4().hex}/gone.webp", data=webp(), content_type="image/webp"))
-        db.commit()
-
-    s = get_settings()
-    with mock_aws(), pytest.MonkeyPatch.context() as mp:
-        for name, value in (("s3_bucket", BUCKET), ("s3_access_key_id", "k"), ("s3_secret_access_key", "s"),
-                            ("s3_region", "us-east-1")):
-            mp.setattr(s, name, value)
-        bucket = migrate_images_to_r2.S3Storage()  # whatever STORAGE_BACKEND says
-        bucket.client.create_bucket(Bucket=BUCKET)
-
-        dry = migrate_images_to_r2.migrate(SessionLocal, bucket, dry_run=True, page=4)
-        assert bucket_keys(bucket) == set()
-        assert (dry.images, dry.uploaded, dry.rows_written, dry.no_owner, dry.unattached) == (21, 20, 1, 1, 0)
-        assert migrate_images_to_r2.verify(SessionLocal, bucket)["rows_without_object"] == 19
-
-        done = migrate_images_to_r2.migrate(SessionLocal, bucket, page=4)
-        assert (done.uploaded, done.rows_written, done.no_owner) == (20, 1, 1)
-        assert len(bucket_keys(bucket)) == 20
-        with SessionLocal() as db:
-            row = db.get(WardrobeImage, legacy)
-            assert row.user_id == user.id and row.item_id is not None and row.attached_at is not None
-            assert db.get(WardrobeImage, unsaved).attached_at is None  # still an orphan: cleanup's job
-        head = bucket.client.head_object(Bucket=BUCKET, Key=saved)
-        assert head["CacheControl"] == "private, max-age=900"
-        assert migrate_images_to_r2.verify(SessionLocal, bucket) == {
-            "items_without_row": 0, "images_without_row": 1, "rows_without_object": 0,  # 1 = the gone user's blob
-        }
-
-        again = migrate_images_to_r2.migrate(SessionLocal, bucket, page=4)  # idempotent
-        assert (again.uploaded, again.rows_written, again.already_done) == (0, 0, 20)
+        st.put(db, "u/abc/one.webp", b"1", "image/webp")
+        st.put(db, "u/abc/two.webp", b"22", "image/webp")
+        st.put(db, "demo/shared.webp", b"333", "image/webp")
+        assert st.get(db, "u/abc/one.webp") == (b"1", "image/webp") and st.exists(db, "u/abc/two.webp")
+        assert st.get(db, "u/abc/missing.webp") is None and not st.exists(db, "u/abc/missing.webp")
+        st.copy(db, "demo/shared.webp", "u/abc/copy.webp")
+        assert st.get(db, "u/abc/copy.webp") == (b"333", "image/webp")
+        assert [k for k, _ in st.list_keys(db, "u/abc/")] == ["u/abc/copy.webp", "u/abc/one.webp", "u/abc/two.webp"]
+        st.delete(db, ["u/abc/one.webp", "u/abc/nope.webp"])
+        st.delete_prefix(db, "u/abc/")
+        assert [k for k, _ in st.list_keys(db)] == ["demo/shared.webp"]
+        for bad in ("../etc/passwd", "u/../../x", "", "/abs"):
+            assert st.get(db, bad) is None and not st.exists(db, bad)  # hostile keys are simply not found
+            with pytest.raises(ValueError):
+                st.put(db, bad, b"x", "image/webp")
+        (tmp_path / "demo" / "half.webp.tmp").write_bytes(b"partial")
+        assert [k for k, _ in st.list_keys(db)] == ["demo/shared.webp"]  # in-flight writes are hidden
+    assert not (tmp_path / "u").exists() or not any((tmp_path / "u").rglob("*.webp"))

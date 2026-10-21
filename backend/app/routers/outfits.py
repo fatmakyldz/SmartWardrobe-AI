@@ -155,8 +155,7 @@ def capsule(
 
 @router.get("", response_model=list[OutfitOut])
 def history(liked_only: bool = False, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    by_id = _items_by_id(user)
-    return [outfit_out(o, by_id) for o in outfits_service.history(db, user, liked_only)]
+    return [outfit_out(o) for o in outfits_service.history(db, user, liked_only)]
 
 
 @router.post("", response_model=OutfitOut, status_code=201)
@@ -178,9 +177,9 @@ def update_outfit_items(outfit_id: uuid.UUID, body: OutfitItemsIn, user: User = 
 @router.post("/{outfit_id}/worn", response_model=OutfitOut)
 def worn(outfit_id: uuid.UUID, user: User = Depends(current_user), db: Session = Depends(get_db)):
     """"Wore it today": counted once per day."""
-    return outfit_out(outfits_service.mark_worn(db, user, outfit_id), _items_by_id(user))
+    return outfit_out(outfits_service.mark_worn(db, user, outfit_id))
 
 
 @router.post("/{outfit_id}/feedback", response_model=OutfitOut)
 def feedback(outfit_id: uuid.UUID, body: FeedbackIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    return outfit_out(feedback_service.rate(db, user, outfit_id, body.rating), _items_by_id(user))
+    return outfit_out(feedback_service.rate(db, user, outfit_id, body.rating))

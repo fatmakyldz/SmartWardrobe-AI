@@ -30,7 +30,7 @@ def cities(q: str = Query(min_length=2, max_length=80), lang: str = "en", _: Use
 
 @router.get("/images/{key:path}")
 def image(key: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Serves images in db storage mode, to their owner only (shared demo pictures: demo accounts).
+    """Serves images in local storage mode, to their owner only (shared demo pictures: demo accounts).
     With the bucket (STORAGE_BACKEND=s3) it is closed: image_url is a presigned link instead."""
     if get_settings().storage_backend == "s3" or not images.can_view(user, key):
         raise HTTPException(404, detail={"code": "not_found"})
