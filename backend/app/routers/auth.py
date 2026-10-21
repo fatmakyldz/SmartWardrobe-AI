@@ -69,7 +69,15 @@ def register(request: Request, response: Response, body: RegisterIn, background:
         if demo is None or not demo.is_demo:
             raise HTTPException(400, detail={"code": "invalid_demo_token"})
     user = profile.create_user(db, body.email, body.password, body.name, body.locale)
-    claimed = claim_demo(db, demo, user, body.keep_demo_items) if demo else None
+    claimed = None
+    if demo:
+        try:
+            claimed = claim_demo(db, demo, user, body.keep_demo_items)
+        except Exception:
+            # The account was committed by create_user: take it back, so a retry isn't email_taken.
+            db.rollback()
+            profile.delete_account(db, db.get(User, user.id))
+            raise
     _send_verification(background, db, user)
     out = _session(db, user, request, response)
     out.claimed = claimed

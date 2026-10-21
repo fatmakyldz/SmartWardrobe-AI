@@ -197,6 +197,7 @@ const en = {
   common: { cancel: 'Cancel', delete: 'Delete', ok: 'OK', retry: 'Try again', close: 'Close' },
   errors: {
     invalid_credentials: 'That email and password don’t match.',
+    invalid_demo_token: 'Your sample session has ended. Start a new one from the welcome screen and try again.',
     email_taken: 'An account with this email already exists. Sign in instead.',
     rate_limited: 'That’s a lot of requests. Wait a few minutes and try again.',
     ai_busy: 'The AI is busy right now. Try again in a minute.',
@@ -410,6 +411,7 @@ const tr: Dict = {
   common: { cancel: 'Vazgeç', delete: 'Sil', ok: 'Tamam', retry: 'Tekrar dene', close: 'Kapat' },
   errors: {
     invalid_credentials: 'E-posta ya da şifre hatalı.',
+    invalid_demo_token: 'Örnek oturumun sona erdi. Karşılama ekranından yenisini başlatıp tekrar dene.',
     email_taken: 'Bu e-postayla bir hesap zaten var. Giriş yapmayı dene.',
     rate_limited: 'Çok fazla istek gönderildi. Birkaç dakika bekleyip tekrar dene.',
     ai_busy: 'Yapay zekâ şu an yoğun. Bir dakika sonra tekrar dene.',

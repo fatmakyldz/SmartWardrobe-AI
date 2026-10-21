@@ -1,5 +1,7 @@
 """AI-07a: onboarding answers at demo creation, and claiming a demo account on registration (§10)."""
 
+import pytest
+
 from app.db import SessionLocal
 from app.models import FeedbackEvent, Item, Outfit, User, WardrobeImage
 from tests.helpers import answer
@@ -90,3 +92,35 @@ def test_claim_rejects_bad_tokens_without_creating_an_account(client, auth, fake
     r = client.post("/auth/register", json={"email": "i@example.com", "password": "supersecret1",
                                             "claim_demo_token": token})
     assert r.status_code == 400 and r.json()["detail"]["code"] == "invalid_demo_token"
+
+
+def test_claim_rejects_a_signed_out_demo_token_and_clears_answers_on_null(client, fake_ai, outbox):
+    token, h, _ = _demo(client, fake_ai)
+    # q1 / q3 given as null clear them (the style screen un-selects a chip this way)
+    r = client.patch("/me/style", json={"answers": {"q1": None, "q3": None}}, headers=h)
+    assert r.json()["answers"] == {"q2": ["neutral", "dark"]}
+    with SessionLocal() as db:
+        demo = db.query(User).filter(User.is_demo).one()
+        demo.token_version += 1  # logout-all
+        db.commit()
+    r = client.post("/auth/register", json={"email": "j@example.com", "password": "supersecret1",
+                                            "claim_demo_token": token})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "invalid_demo_token"
+
+
+def test_claim_failure_takes_the_new_account_back(client, fake_ai, outbox, monkeypatch):
+    token, _, _ = _demo(client, fake_ai)
+
+    def boom(db, user, item):
+        raise RuntimeError("object store down")
+
+    monkeypatch.setattr("app.services.demo.copy_shared_image", boom)
+    with pytest.raises(RuntimeError):
+        client.post("/auth/register", json={"email": "k@example.com", "password": "supersecret1",
+                                            "claim_demo_token": token, "keep_demo_items": True})
+    with SessionLocal() as db:
+        assert db.query(User).filter(User.email == "k@example.com").count() == 0
+        assert db.query(User).filter(User.is_demo).count() == 1  # the demo survived, can retry
+    r = client.post("/auth/register", json={"email": "k@example.com", "password": "supersecret1",
+                                            "claim_demo_token": token})
+    assert r.status_code == 201 and r.json()["claimed"]["style_profile"] is True

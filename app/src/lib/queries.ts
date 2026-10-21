@@ -27,8 +27,8 @@ export function useFreshItem(item: Item): Item {
   return data?.find((i) => i.id === item.id) ?? item;
 }
 
-export function useOutfits(liked: boolean) {
-  return useQuery({ queryKey: keys.outfits(liked), queryFn: () => api.outfits(liked), staleTime: IMAGE_LINK_STALE });
+export function useOutfits(liked: boolean, enabled = true) {
+  return useQuery({ queryKey: keys.outfits(liked), queryFn: () => api.outfits(liked), staleTime: IMAGE_LINK_STALE, enabled });
 }
 
 export function useLatestOutfits() {

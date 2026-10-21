@@ -43,7 +43,7 @@ export default function Today() {
 
   // A demo account's first visit gets a suggestion without a tap (§10 step 2): once per account, and
   // only while it has no outfit at all, so coming back to the tab doesn't spend another request.
-  const history = useOutfits(false);
+  const history = useOutfits(false, !!user?.is_demo);
   const autoFor = useRef<string | null>(null);
   const [autoShown, setAutoShown] = useState(false);
   useEffect(() => {

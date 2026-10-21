@@ -82,7 +82,9 @@ def claim_demo(db: Session, demo: User, user: User, keep_items: bool) -> dict:
     """"Set up my own wardrobe": the demo account's style profile, outfits and feedback move to the new
     account (§10 step 4). The outfits are made of demo pieces, so they come along only with keep_items,
     which copies the 17 pieces (each with its own picture, decision 15); otherwise only the profile moves.
-    The demo account is deleted at the end. Returns what moved, for the response."""
+    The demo account is deleted at the end. Returns what moved, for the response.
+    Not moved: usage_counters and ai_requests.subject_id stay with the demo id (the new account starts
+    the day with its own quota; the demo's spend stays pseudonymous)."""
     if not demo.is_demo:
         raise ValueError("not a demo account")
     moved = {"style_profile": False, "items": 0, "outfits": 0, "feedback_events": 0}

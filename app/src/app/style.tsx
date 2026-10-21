@@ -102,7 +102,7 @@ export default function StyleScreen() {
                   save.mutate(
                     primary
                       ? { answers: { q1: null }, styles: s.styles.filter((v) => v !== x) }
-                      : { styles: toggle(s.styles, x) },
+                      : { styles: toggle(s.styles, x).slice(0, 4) },
                   );
                 }}
               />

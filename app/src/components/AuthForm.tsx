@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 
-import { accessToken, api } from '@/lib/api';
+import { accessToken, api, ApiError, refreshSession } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
@@ -33,7 +33,13 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' | 'claim' }) {
     setBusy(true);
     setError(null);
     try {
-      const claim = isClaim ? { claim_demo_token: accessToken() ?? undefined, keep_demo_items: keepItems } : {};
+      let claim = {};
+      if (isClaim) {
+        // The claim carries the demo's access token, which lives 15 minutes: get a fresh one first.
+        const fresh = (await refreshSession().catch(() => null))?.access ?? accessToken();
+        if (!fresh) throw new ApiError('invalid_demo_token', 400);
+        claim = { claim_demo_token: fresh, keep_demo_items: keepItems };
+      }
       const res = isUp
         ? await api.register({ email: email.trim(), password, name: name.trim(), locale: lang, ...claim })
         : await api.login({ email: email.trim(), password });
