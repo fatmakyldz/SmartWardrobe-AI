@@ -46,7 +46,7 @@ The original code is preserved on the [`legacy-streamlit`](https://github.com/fa
 
 ### Phase 4 — Stores
 - [ ] App icon, splash, store screenshots
-- [ ] Privacy policy page (photos, account data, AI processing)
+- [x] Privacy policy page (photos, account data, AI processing) — in the app at `/privacy` (EN/TR); `wardrobe.fomertech.com/privacy` is the public URL for the stores
 - [ ] EAS builds → TestFlight + Google Play internal testing
 - [ ] Store listings (EN/TR) and review submission
 
@@ -68,4 +68,7 @@ Design: [`docs/AI-00-foundation.md`](docs/AI-00-foundation.md) — Claude primar
 - [x] AI-07e Taste summary depth — the rule-based summary (no LLM) now also reads patterns ("Likes knit pieces", "Skips floral"), the go-to top + bottom pairing, layering, and weights worn outfits double; still one line in the suggest context, prompt untouched
 - [x] i18n infrastructure — one language list each side (`vocab.LANGS` / `SUPPORTED_LANGS`), device-language detection and the Profile picker read it, unknown codes fall back to English; no new language yet (chosen from store data after launch)
 - [ ] AI-08 Entitlements UI + usage — `GET /me/entitlements` (plan, limits, features, today's usage, what verifying unlocks); Today shows suggestions left, Profile shows the plan card, limit and verify messages take their numbers from the API; feature gating (`user_outfits`, `capsule`) replaces `is_demo` checks; `reconcile_usage.py` rebuilds `usage_counters` from `ai_requests` *(this PR)*
-- [ ] AI-09 V1.0 hardening — scope in the design doc (§13)
+- [ ] AI-09a Hardening — `GET /me/export` (data portability) + “Download my data” in Profile, privacy policy page (`/privacy`, linked from Profile and sign-up), `ai_requests.subject_id` anonymised after 90 days (`cleanup_orphans.py`), uptime note *(this PR)*
+- [ ] AI-09b Error tracking — Sentry (backend `sentry-sdk`, app `@sentry/react-native`), off until a DSN is set
+- [ ] AI-09c Cleanup migration — `0004_cleanup` ≥ 1 week after the R2 migration is verified (§14 C9); `ai_requests` 13-month roll-up into monthly aggregates is due from Nov 2027
+- [ ] Store metadata, brand/bundle id, builds — see Phase 4

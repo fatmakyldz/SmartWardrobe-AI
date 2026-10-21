@@ -8,6 +8,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import FeedbackEvent, Item, Outfit, RefreshToken, User
+from ..storage import get_storage
 from ..security import hash_password
 from ..vocab import normalize_lang
 from . import images
@@ -59,6 +60,57 @@ def update_profile(db: Session, user: User, values: dict) -> User:
         setattr(user, field, value.strip() if isinstance(value, str) else value)
     db.commit()
     return user
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+def export_account(db: Session, user: User, now: datetime | None = None) -> dict:
+    """Everything the account holds, as plain JSON (data portability, §9): profile, style answers, pieces
+    (tags + a short-lived photo link), outfits with their pieces, feedback events. No AI telemetry: those
+    rows are pseudonymous usage records, not the person's data. Read-only."""
+    now = now or datetime.now(timezone.utc)
+    storage = get_storage()
+    items = sorted(user.items, key=lambda i: i.created_at)
+    outfits = sorted(user.outfits, key=lambda o: o.created_at)
+    feedback = db.scalars(select(FeedbackEvent).where(FeedbackEvent.user_id == user.id).order_by(FeedbackEvent.created_at)).all()
+    return {
+        "format": "smartwardrobe-export/1",
+        "exported_at": now.isoformat(),
+        "account": {
+            "email": user.email, "name": user.name, "locale": user.locale, "timezone": user.timezone,
+            "city": user.city, "lat": user.lat, "lon": user.lon, "plan": user.plan,
+            "created_at": _iso(user.created_at), "email_verified_at": _iso(user.email_verified_at),
+            "onboarding_completed_at": _iso(user.onboarding_completed_at),
+        },
+        "style": {"answers": user.style_profile or {}, "summary": user.style_summary, "summary_at": _iso(user.style_summary_at)},
+        "items": [
+            {
+                "id": str(i.id), "name": i.name, "category": i.category, "subcategory": i.subcategory,
+                "colors": i.colors or [], "pattern": i.pattern, "warmth": i.warmth, "formality": i.formality,
+                "seasons": i.seasons or [], "brand": i.brand, "material": i.material, "is_favorite": i.is_favorite,
+                "wear_count": i.wear_count, "last_worn_at": _iso(i.last_worn_at), "archived_at": _iso(i.archived_at),
+                "ai_confidence": i.ai_confidence, "created_at": _iso(i.created_at),
+                "photo_url": storage.url(i.image_key),  # a short-lived link; download the photos with the export
+            }
+            for i in items
+        ],
+        "outfits": [
+            {
+                "id": str(o.id), "title": o.title, "reason": o.reason, "occasion": o.occasion, "note": o.note,
+                "weather": o.weather or {}, "source": o.source, "rating": o.rating, "lang": o.lang,
+                "worn_at": _iso(o.worn_at), "created_at": _iso(o.created_at),
+                "item_ids": [str(oi.item_id) for oi in sorted(o.outfit_items, key=lambda oi: oi.position)] or list(o.item_ids or []),
+            }
+            for o in outfits
+        ],
+        "feedback": [
+            {"kind": f.kind, "outfit_id": str(f.outfit_id) if f.outfit_id else None,
+             "item_id": str(f.item_id) if f.item_id else None, "created_at": _iso(f.created_at)}
+            for f in feedback
+        ],
+    }
 
 
 def delete_account(db: Session, user: User) -> None:
