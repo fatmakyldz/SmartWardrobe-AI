@@ -197,10 +197,10 @@ def test_summary_rules():
     disliked = [[piece("top", "tee", ["pink"], 1), piece("bottom", "shorts", ["black"], 1)]]
     assert profile.build_summary(liked, disliked, "en") == (
         "Likes black, navy and white pieces. Often picks shirt, trousers and loafers. Leans formal. "
-        "Go-to combination: shirt + trousers. Tends to skip pink.")
+        "Tends to skip pink. Go-to combination: shirt + trousers.")
     assert profile.build_summary(liked, disliked, "tr") == (
         "Siyah, lacivert ve beyaz parçaları seviyor. Sık seçtikleri: shirt, trousers ve loafers. "
-        "Tarzı daha çok resmi. Vazgeçmediği ikili: shirt + trousers. Pembe tonlarını pek sevmiyor.")
+        "Tarzı daha çok resmi. Pembe tonlarını pek sevmiyor. Vazgeçmediği ikili: shirt + trousers.")
     assert profile.build_summary([], [], "en") is None
 
 
@@ -212,17 +212,28 @@ def test_summary_patterns_layers_and_worn_weight():
             piece("outerwear", "coat", ["brown"])]
     plain = [piece("top", "tee", ["white"]), piece("bottom", "jeans", ["blue"], pattern="denim")]
     floral = [piece("dress", "midi dress", ["pink"], 3, pattern="floral")]
-    # Worn twice-weighted: the knit outfit worn once outweighs the plain one liked once → knit shows
-    # up, the sweater + jeans pairing is the go-to, and the coat makes layering the norm (2 of 3).
+
+    # Liked only: the knit outfit is 1 of 3 (knit share 1/7, layered 1/3) → no pattern / layer sentence.
+    text = profile.build_summary([plain, plain, knit], [floral, floral], "en")
+    assert "knit" not in text and "layer" not in text and "Skips floral pieces." in text
+    # Worn counts double for the counts: the same knit outfit worn once lifts the knit share to 2/8.
     text = profile.build_summary([plain], [floral, floral], "en", worn=[knit])
-    assert "Likes knit pieces." in text and "Skips floral." in text
+    assert "Likes knit pieces." in text
+    # One worn outfit alone is not a habit: no combination, no layer.
+    alone = profile.build_summary([], [], "en", worn=[knit])
+    assert "Go-to" not in alone and "layer" not in alone
+    # Two distinct outfits sharing the pairing and the coat: both habits.
+    text = profile.build_summary([knit], [], "en", worn=[knit])
     assert "Go-to combination: sweater + jeans." in text and "Usually adds a layer." in text
-    # Without the worn weight the plain outfit wins: no knit sentence, no layer sentence.
-    text2 = profile.build_summary([plain, plain], [], "en", worn=[])
-    assert "knit" not in text2 and "layer" not in text2
-    assert len(text.split(". ")) <= profile.MAX_SENTENCES
-    tr = profile.build_summary([plain], [floral, floral], "tr", worn=[knit])
-    assert "Triko parçalara sıcak." in tr and "Çiçekli pek giymiyor." in tr and "Genelde üstüne bir kat alıyor." in tr
+    tr = profile.build_summary([knit], [floral, floral], "tr", worn=[knit])
+    assert "Triko parçalara sıcak bakıyor." in tr and "Çiçekli desenleri pek giymiyor." in tr
+    assert "Genelde üstüne bir kat alıyor." in tr and "Vazgeçmediği ikili: sweater + jeans." in tr
+
+    # All eight sentences fit: nothing is dropped.
+    liked = [[piece("top", "shirt", ["navy"], 4, "striped"), piece("bottom", "trousers", ["black"], 4), piece("outerwear", "blazer", ["navy"], 4)]]
+    full = profile.build_summary(liked, [[piece("top", "tee", ["pink"], 1, "floral")], [piece("top", "tee", ["pink"], 1, "floral")]],
+                                 "en", worn=liked)
+    assert full.count(". ") + 1 == 8 and full.endswith("Usually adds a layer.") and "Tends to skip pink." in full
 
 
 def test_summary_refreshes_every_ten_events_or_after_a_week(client):

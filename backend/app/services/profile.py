@@ -141,7 +141,7 @@ WORN_WEIGHT = 2  # wearing an outfit says more than liking it
 PATTERN_SHARE = 0.25  # a non-plain pattern on this share of liked pieces is a taste, not a one-off
 NOT_A_TASTE = ('solid', 'other', 'denim')  # jeans are in every wardrobe; denim says nothing about taste
 LAYER_SHARE = 0.5  # outerwear in this share of liked outfits → "usually adds a layer"
-MAX_SENTENCES = 7  # seven short sentences ≈ 80 tokens; the TASTE SUMMARY line is budgeted at ~150 (§6)
+MAX_SENTENCES = 8  # all eight candidates ≈ 60–90 tokens; the TASTE SUMMARY line is budgeted at ~150 (§6)
 
 PATTERN_TR = {"striped": "çizgili", "checked": "ekose", "floral": "çiçekli", "printed": "desenli", "denim": "kot",
               "knit": "triko", "leather": "deri"}
@@ -149,8 +149,9 @@ PATTERN_TR = {"striped": "çizgili", "checked": "ekose", "floral": "çiçekli", 
 
 def build_summary(liked: list[list[Item]], disliked: list[list[Item]], lang: str,
                   worn: list[list[Item]] | None = None) -> str | None:
-    """Up to six template sentences, no LLM: colours, pieces, formality, patterns, the go-to combination,
-    layering, and what gets skipped. Inputs are outfits (lists of pieces); worn outfits count double."""
+    """Up to eight template sentences, no LLM: colours, pieces, formality, what gets skipped, patterns, the
+    go-to combination and layering. Inputs are outfits (lists of pieces); worn outfits count double for
+    the counts, but habits (combination, layering) need at least two distinct outfits."""
     worn = worn or []
     if not liked and not disliked and not worn:
         return None
@@ -159,6 +160,7 @@ def build_summary(liked: list[list[Item]], disliked: list[list[Item]], lang: str
     pattern = (lambda x: PATTERN_TR.get(x, x)) if tr else (lambda x: x)
 
     positive = liked + worn * WORN_WEIGHT  # outfit lists; a worn outfit appears twice
+    observed = len(liked) + len(worn)  # distinct outfits, for the habit thresholds
     pos_items = [i for o in positive for i in o]
     neg_items = [i for o in disliked for i in o]
     pos_colors = Counter(c for i in pos_items for c in i.colors)
@@ -179,22 +181,26 @@ def build_summary(liked: list[list[Item]], disliked: list[list[Item]], lang: str
         level = 0 if avg < 2.5 else 1 if avg < 3.5 else 2
         sentences.append(("Tarzı daha çok günlük.", "Tarzı şık-günlük.", "Tarzı daha çok resmi.")[level] if tr
                          else ("Leans casual.", "Leans smart-casual.", "Leans formal.")[level])
+    if avoid:
+        names = _join([color(c) for c in avoid], lang)
+        sentences.append(f"{names.capitalize()} tonlarını pek sevmiyor." if tr else f"Tends to skip {names}.")
 
     # Patterns: a non-plain pattern on a real share of what they like; the one they skip most.
     pos_patterns = Counter(i.pattern for i in pos_items if i.pattern and i.pattern not in NOT_A_TASTE)
-    if pos_patterns and pos_items:
+    if pos_patterns:
         pat, n = pos_patterns.most_common(1)[0]
         if n / len(pos_items) >= PATTERN_SHARE:
-            sentences.append(f"{pattern(pat).capitalize()} parçalara sıcak." if tr else f"Likes {pattern(pat)} pieces.")
+            sentences.append(f"{pattern(pat).capitalize()} parçalara sıcak bakıyor." if tr else f"Likes {pattern(pat)} pieces.")
     neg_patterns = Counter(i.pattern for i in neg_items if i.pattern and i.pattern not in NOT_A_TASTE)
     if neg_patterns:
         pat, n = neg_patterns.most_common(1)[0]
         if n >= 2 and pos_patterns.get(pat, 0) == 0:
-            sentences.append(f"{pattern(pat).capitalize()} pek giymiyor." if tr else f"Skips {pattern(pat)}.")
+            sentences.append(f"{pattern(pat).capitalize()} desenleri pek giymiyor." if tr else f"Skips {pattern(pat)} pieces.")
 
-    # The go-to combination: the most frequent (top, bottom) pair by piece type, or a dress.
+    # The go-to combination: the most frequent (top, bottom) pair by piece type, or a dress, seen in at
+    # least two distinct outfits (ties: liked before worn, newest first within each).
     combos = Counter()
-    for o in positive:
+    for o in liked + worn:
         top = next((i for i in o if i.category == "top"), None)
         bottom = next((i for i in o if i.category == "bottom"), None)
         dress = next((i for i in o if i.category == "dress"), None)
@@ -207,15 +213,11 @@ def build_summary(liked: list[list[Item]], disliked: list[list[Item]], lang: str
         if n >= 2:
             sentences.append(f"Vazgeçmediği ikili: {combo}." if tr else f"Go-to combination: {combo}.")
 
-    # Layers: outerwear in most liked outfits.
-    if positive:
-        layered = sum(1 for o in positive if any(i.category == "outerwear" for i in o))
-        if layered / len(positive) >= LAYER_SHARE and len(positive) >= 2:
+    # Layers: outerwear in most of the (distinct) outfits they liked or wore.
+    if observed >= 2:
+        layered = sum(1 for o in liked + worn if any(i.category == "outerwear" for i in o))
+        if layered / observed >= LAYER_SHARE:
             sentences.append("Genelde üstüne bir kat alıyor." if tr else "Usually adds a layer.")
-
-    if avoid:
-        names = _join([color(c) for c in avoid], lang)
-        sentences.append(f"{names.capitalize()} tonlarını pek sevmiyor." if tr else f"Tends to skip {names}.")
     return " ".join(sentences[:MAX_SENTENCES]) or None
 
 

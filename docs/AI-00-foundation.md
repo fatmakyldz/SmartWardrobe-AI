@@ -335,7 +335,7 @@ Hedef akış "3 soru → anında demo kombin → kendi gardırobu"; mevcut demo 
 | 5. Kendi parçaları | foto ekle → AI etiket → onay | `items` (+ `ai_tags_raw`, `ai_confidence`), `wardrobe_images.attached_at` | gardırop ön filtre |
 | 6. Explicit tercihler | Profile'da "sevdiğim renkler / kaçındıklarım / tarz" chip'leri | `users.style_profile.{liked_colors, disliked_colors, styles, avoid}` | style profile satırları |
 | 7. "Bugün giydim" | kombin kartında tek dokunuş | `outfits.worn_at`, her parça için `items.wear_count += 1`, `last_worn_at`; `feedback_events(kind=worn)` | recently worn listesi (7 gün) |
-| 8. Tercih özeti | sistem; **LLM değil, kural tabanlı** V1.0'da: son 30 olayın parça/renk/formality dağılımı → 3-4 cümle şablon ("koyu nötrleri, loafer'ı tercih ediyor; floral'dan kaçınıyor") | `users.style_summary`, `style_summary_at`; her 10 olayda ya da 7 günde bir, senkron (ucuz) | §6 adım 5; ham geçmiş listesi prompt'tan çıkar |
+| 8. Tercih özeti | sistem; **LLM değil, kural tabanlı** V1.0'da: son 30 olayın parça/renk/formality/desen dağılımı + vazgeçilmez üst-alt ikilisi + kat alma → 3–8 kısa şablon cümle (≈ 60–90 token, §6'daki 150 bütçesi içinde; giyilen kombinler sayımda iki kat, alışkanlık cümleleri en az iki ayrı kombin ister — AI-07e) ("koyu nötrleri, loafer'ı tercih ediyor; floral'dan kaçınıyor") | `users.style_summary`, `style_summary_at`; her 10 olayda ya da 7 günde bir, senkron (ucuz) | §6 adım 5; ham geçmiş listesi prompt'tan çıkar |
 
 **Ne yazılmaz:** onboarding cevapları AI'ya ham değil, kısa etiketler olarak gider; `note` metni özete girmez; demo kullanıcının verisi 24 saat sonra silinir (claim edilmediyse).
 
