@@ -293,6 +293,36 @@ class StyleOut(BaseModel):
     summary: str | None = None
 
 
+class UsageOut(BaseModel):
+    requests_used: int  # counted AI requests today (suggest / intent / capsule_explain)
+    requests_left: int
+    tokens_used: int
+    tokens_left: int
+    reset_at: datetime  # next midnight in the user's timezone, UTC
+
+
+class AfterVerifyOut(BaseModel):
+    plan: str
+    max_items: int
+    daily_ai_requests: int
+
+
+class EntitlementsOut(BaseModel):
+    """What the account may do today, from config — the app shows limits from here, never from constants."""
+
+    plan: str  # free | premium | demo | unverified
+    verified: bool
+    max_items: int
+    items_used: int
+    daily_ai_requests: int
+    daily_ai_tokens: int
+    features: list[str]
+    model_tier: str
+    history_limit: int
+    usage: UsageOut
+    after_verify: AfterVerifyOut | None = None  # what confirming the e-mail unlocks; only while unverified
+
+
 class VocabOut(BaseModel):
     categories: list[str]
     colors: list[str]

@@ -118,6 +118,19 @@ def entitlements(user: User, db: Session, now: datetime | None = None) -> Entitl
     return ent
 
 
+def after_verify(user: User) -> Entitlements | None:
+    """What confirming the e-mail unlocks (the account's real plan), or None once it is confirmed."""
+    if user.is_demo or user.email_verified_at is not None:
+        return None
+    plans = plans_config()["plans"]
+    return _from_plan(user.plan if user.plan in plans else "free")
+
+
+def usage_snapshot(db: Session, user: User, ent: Entitlements, now: datetime | None = None) -> BudgetDecision:
+    """Today's budget as a read-only decision (a request-counted feature, no estimate): what the app shows."""
+    return check_ai_budget(db, user.id, "suggest", 0, ent, user.timezone, now)
+
+
 def require_feature(ent: Entitlements, feature: str) -> None:
     if feature not in ent.allowed_features:
         raise AIError("feature_not_allowed", feature=feature)

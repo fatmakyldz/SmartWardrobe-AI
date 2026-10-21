@@ -1,6 +1,6 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api, Intent, Item, Occasion, Outfit, Tags } from './api';
+import { api, Feature, Intent, Item, Occasion, Outfit, Tags } from './api';
 
 export const keys = {
   items: ['items'] as const,
@@ -9,6 +9,7 @@ export const keys = {
   latestOutfits: ['outfits', 'latest'] as const,
   latestIntent: ['outfits', 'latest', 'intent'] as const, // what the last free-text request parsed to
   analysis: ['analysis'] as const,
+  entitlements: ['entitlements'] as const,
 };
 
 // Saved lists (['outfits', true|false]) — everything under ['outfits'] except the client-only latest set.
@@ -53,6 +54,8 @@ export function useSuggest() {
       qc.setQueryData<Intent | null>(keys.latestIntent, res.intent);
       invalidateOutfitLists(qc);
     },
+    // Settled, not success: a refusal (budget_exceeded, or quota spent on another device) changes the numbers too.
+    onSettled: () => void invalidateUsage(qc),
   });
 }
 
@@ -92,6 +95,25 @@ export function useSaveOutfit() {
   });
 }
 
+/** Plan, limits, features and today's usage — the numbers every limit message is built from. */
+export function useEntitlements(enabled = true) {
+  return useQuery({ queryKey: keys.entitlements, queryFn: api.entitlements, enabled, staleTime: 60_000 });
+}
+
+/**
+ * True when the plan includes the feature; undefined while loading (callers hide the control until then).
+ * If the entitlements can't be fetched at all, `fallback` decides — the server still enforces the feature.
+ */
+export function useHasFeature(feature: Feature, fallback = false): boolean | undefined {
+  const ent = useEntitlements();
+  if (ent.data) return ent.data.features.includes(feature);
+  return ent.isError ? fallback : undefined;
+}
+
+export function invalidateUsage(qc: QueryClient) {
+  return qc.invalidateQueries({ queryKey: keys.entitlements });
+}
+
 export function useAnalysis(enabled = true) {
   return useQuery({ queryKey: keys.analysis, queryFn: api.analysis, enabled, staleTime: 5 * 60_000 });
 }
@@ -103,6 +125,7 @@ export function useCreateItem() {
     onSuccess: (item) => {
       qc.setQueryData<Item[]>(keys.items, (old) => [item, ...(old ?? [])]);
       void qc.invalidateQueries({ queryKey: keys.analysis });
+      void invalidateUsage(qc);
     },
   });
 }
@@ -126,6 +149,7 @@ export function useDeleteItem() {
       qc.setQueryData<Item[]>(keys.items, (old) => old?.filter((i) => i.id !== id));
       qc.invalidateQueries({ queryKey: ['outfits'] });
       void qc.invalidateQueries({ queryKey: keys.analysis });
+      void invalidateUsage(qc);
     },
   });
 }

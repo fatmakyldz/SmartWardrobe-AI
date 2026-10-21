@@ -104,6 +104,7 @@ Rollback: set `STORAGE_BACKEND=db` again — the `images` table is untouched unt
 | POST | `/auth/forgot`, `/auth/reset` | `{email}` → always 200 / `{token, password}` → new password, every session signed out |
 | POST | `/auth/demo` | `{locale, style_profile?}` → private demo account with a 17-piece sample wardrobe (deleted after 24 h); `style_profile` carries the onboarding answers (same shape as `PATCH /me/style`) so the first suggestion already uses them |
 | GET/PATCH/DELETE | `/me` | profile, city, language; DELETE removes the account and every photo |
+| GET | `/me/entitlements` | plan, limits, features and today's usage (`requests_used/left`, `tokens_used/left`, `reset_at`), plus `after_verify` (what confirming the e-mail unlocks) while unverified — the numbers the app shows, from config |
 | GET/PATCH | `/me/style` | style preferences `{answers: {q1 style, q2 palettes, q3 priority}, liked_colors, disliked_colors, styles, avoid}` (fixed vocabularies) + the rule-based taste summary |
 | POST | `/items/analyze` | upload a photo → stored + AI-suggested tags, plus `confidence` (0-1) and `uncertain` (tag fields the model flagged) |
 | GET/POST | `/items` | list / save (after the user confirms the tags) |

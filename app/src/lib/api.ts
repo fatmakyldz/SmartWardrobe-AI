@@ -131,6 +131,24 @@ export type WardrobeAnalysis = {
   neutral_share: number;
   gaps: Gap[];
 };
+/** Plan features in display order (the API returns them sorted). */
+export const FEATURES = ['tagging', 'suggest', 'intent', 'user_outfits', 'capsule'] as const;
+export type Feature = (typeof FEATURES)[number];
+export type Entitlements = {
+  plan: 'free' | 'premium' | 'demo' | 'unverified' | string;
+  verified: boolean;
+  max_items: number;
+  items_used: number;
+  daily_ai_requests: number;
+  daily_ai_tokens: number;
+  features: Feature[];
+  model_tier: 'standard' | 'premium' | string;
+  history_limit: number;
+  usage: { requests_used: number; requests_left: number; tokens_used: number; tokens_left: number; reset_at: string };
+  /** What confirming the e-mail unlocks; only present while unverified. */
+  after_verify: { plan: string; max_items: number; daily_ai_requests: number } | null;
+};
+
 export type Capsule = {
   occasions: Occasion[];
   season: string;
@@ -284,6 +302,7 @@ export const api = {
   me: () => request<User>('/me'),
   updateMe: (b: Partial<Pick<User, 'name' | 'locale' | 'city' | 'lat' | 'lon'>>) => request<User>('/me', json('PATCH', b)),
   deleteMe: () => request<void>('/me', { method: 'DELETE' }),
+  entitlements: () => request<Entitlements>('/me/entitlements'),
   style: () => request<StyleProfile>('/me/style'),
   updateStyle: (b: StylePatch) => request<StyleProfile>('/me/style', json('PATCH', b)),
 

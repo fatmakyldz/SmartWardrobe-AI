@@ -2,7 +2,8 @@ import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { api, ApiError, City } from '@/lib/api';
+import { api, City } from '@/lib/api';
+import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
 import { space, usePalette } from '@/lib/theme';
 
@@ -11,6 +12,7 @@ import { Button, Field, Notice, T, tap } from './ui';
 export function CityPicker({ onPick }: { onPick: (c: { city: string; lat: number; lon: number }) => void }) {
   const { t, lang } = useI18n();
   const p = usePalette();
+  const errorText = useErrorText();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<City[]>([]);
   const [locating, setLocating] = useState(false);
@@ -22,10 +24,10 @@ export function CityPicker({ onPick }: { onPick: (c: { city: string; lat: number
       api
         .cities(q.trim(), lang)
         .then(setResults)
-        .catch((e) => setError(t.errors[(e as ApiError).code as keyof typeof t.errors] ?? t.errors.unknown));
+        .catch((e) => setError(errorText(e)));
     }, 300);
     return () => clearTimeout(id);
-  }, [q, lang, t]);
+  }, [q, lang, errorText]);
 
   async function useMyLocation() {
     setError(null);

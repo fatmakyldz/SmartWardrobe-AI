@@ -10,7 +10,7 @@ import { api, Gap, Intent, Item, Occasion, OCCASIONS, Outfit } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useErrorText } from '@/lib/errors';
 import { skyKey, useI18n } from '@/lib/i18n';
-import { useAnalysis, useFeedback, useItems, useLatestIntent, useLatestOutfits, useOutfits, useSuggest, useWorn } from '@/lib/queries';
+import { useAnalysis, useEntitlements, useFeedback, useHasFeature, useItems, useLatestIntent, useLatestOutfits, useOutfits, useSuggest, useWorn } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
 
 export default function Today() {
@@ -39,6 +39,8 @@ export default function Today() {
   const suggest = useSuggest();
   const feedback = useFeedback();
   const worn = useWorn();
+  const ent = useEntitlements(!!user).data;
+  const canEdit = useHasFeature('user_outfits', !!user && !user.is_demo) === true;
   const intent = useLatestIntent().data;
 
   const cats = new Set((items.data ?? []).map((i) => i.category));
@@ -84,7 +86,13 @@ export default function Today() {
     <Screen>
       {unverified ? (
         <View style={{ marginTop: space.lg, gap: space.sm }}>
-          <Notice>{resent ? t.today.resent : t.today.verifyBanner(user.email)}</Notice>
+          <Notice>
+            {resent
+              ? t.today.resent
+              : ent?.after_verify
+                ? t.today.verifyBanner(user.email, ent.after_verify.max_items, ent.after_verify.daily_ai_requests)
+                : t.today.verifyBannerShort(user.email)}
+          </Notice>
           {resend.isError ? <Notice tone="error">{errorText(resend.error)}</Notice> : null}
           {!resent ? (
             <Button label={t.today.resend} kind="secondary" loading={resend.isPending} onPress={() => resend.mutate()} />
@@ -177,6 +185,11 @@ export default function Today() {
               suggest.mutate(parse && text ? { occasion, note: text, request: text, lang } : { occasion, note: text, lang });
             }}
           />
+          {ent ? (
+            <T variant="small" color="muted">
+              {t.today.quota(ent.usage.requests_left, ent.daily_ai_requests)}
+            </T>
+          ) : null}
           {intent && intentSummary(intent, t, lang) ? (
             <T variant="small" color="muted">
               {t.today.understood} {intentSummary(intent, t, lang)}
@@ -215,7 +228,7 @@ export default function Today() {
               tap();
               worn.mutate(o.id);
             }}
-            onEdit={user?.is_demo ? undefined : () => router.push({ pathname: '/outfit/[id]', params: { id: o.id } })}
+            onEdit={canEdit ? () => router.push({ pathname: '/outfit/[id]', params: { id: o.id } }) : undefined}
           />
         ))}
       </View>

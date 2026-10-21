@@ -4,9 +4,12 @@ from sqlalchemy.orm import Session
 from ..ai import telemetry
 from ..db import get_db
 from ..models import User
-from ..schemas import StyleIn, StyleOut, UserOut, UserUpdate
+from ..entitlements import entitlements
+from ..entitlements.service import after_verify, usage_snapshot
+from ..schemas import AfterVerifyOut, EntitlementsOut, StyleIn, StyleOut, UsageOut, UserOut, UserUpdate
 from ..security import current_user
 from ..services import profile
+from ..services.wardrobe import active_item_count
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -28,6 +31,26 @@ def delete_me(user: User = Depends(current_user), db: Session = Depends(get_db))
     telemetry.forget_subject(db, user.id)  # same transaction as the account rows
     profile.delete_account(db, user)
     return Response(status_code=204)
+
+
+@router.get("/entitlements", response_model=EntitlementsOut)
+def my_entitlements(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Plan, limits, features and today's usage (AI-08). Read-only; the gateway's own budget check is the
+    one that decides a request, this is the same numbers for the app to show."""
+    ent = entitlements(user, db)
+    decision = usage_snapshot(db, user, ent)
+    used_requests = ent.daily_ai_requests - (decision.remaining_requests or 0)
+    nxt = after_verify(user)
+    return EntitlementsOut(
+        plan=ent.plan, verified=nxt is None,
+        after_verify=AfterVerifyOut(plan=nxt.plan, max_items=nxt.max_items, daily_ai_requests=nxt.daily_ai_requests) if nxt else None,
+        max_items=ent.max_items, items_used=active_item_count(user),
+        daily_ai_requests=ent.daily_ai_requests, daily_ai_tokens=ent.daily_ai_tokens,
+        features=sorted(ent.allowed_features), model_tier=ent.model_tier, history_limit=ent.history_limit,
+        usage=UsageOut(requests_used=max(0, used_requests), requests_left=decision.remaining_requests or 0,
+                       tokens_used=ent.daily_ai_tokens - decision.remaining_tokens, tokens_left=decision.remaining_tokens,
+                       reset_at=decision.reset_at),
+    )
 
 
 def _style_out(user: User) -> StyleOut:
