@@ -5,7 +5,6 @@ capsule_explain to the mid model (routes.default.json); the pieces and numbers n
 import uuid
 
 from ...vocab import LANG_NAME
-from ...vocab import LANG_NAME
 from ..gateway import AIRequest, AIResponse, BudgetGate, complete
 from ..providers import TextPart
 from ..schemas.capsule import MAX_TIPS, CapsuleExplainOut

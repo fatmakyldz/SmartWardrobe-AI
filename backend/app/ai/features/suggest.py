@@ -9,7 +9,6 @@ from dataclasses import dataclass
 
 from ...outfit_rules import complete_outfit
 from ...vocab import LANG_NAME
-from ...vocab import LANG_NAME
 from ..gateway import AIRequest, AIResponse, BudgetGate, complete
 from ..providers import TextPart
 from ..schemas import SuggestOut

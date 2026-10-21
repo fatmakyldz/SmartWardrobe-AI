@@ -20,7 +20,6 @@ from ..serialize import item_out
 from ..services import images, orchestration, wardrobe
 from ..storage import get_storage
 from ..vocab import normalize_lang
-from ..vocab import normalize_lang
 
 router = APIRouter(prefix="/items", tags=["items"])
 

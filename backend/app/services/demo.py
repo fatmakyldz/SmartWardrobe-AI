@@ -42,13 +42,14 @@ DEMO_LAT, DEMO_LON = 41.0082, 28.9784
 
 
 def create_demo_user(db: Session, locale: str, style_profile: dict | None = None) -> User:
+    locale = normalize_lang(locale)  # names and city exist in EN and TR; anything else reads the EN ones
     # The 17 pictures are shared by every demo account (§14 C5): uploaded once, never copied per visitor.
     ensure_demo_images(db, [row[0] for row in DEMO_ITEMS])
     user = User(
         email=f"demo-{uuid.uuid4().hex[:12]}@demo.example.com",
         password_hash=hash_password(secrets.token_urlsafe(24)),  # unusable; demo users can't log in
         name="Demo",
-        locale=normalize_lang(locale),
+        locale=locale,
         city=DEMO_CITY.get(locale, "Istanbul"),
         lat=DEMO_LAT,
         lon=DEMO_LON,
@@ -63,7 +64,7 @@ def create_demo_user(db: Session, locale: str, style_profile: dict | None = None
             Item(
                 user_id=user.id,
                 image_key=demo_key(file),
-                name=name_tr if normalize_lang(locale) == "tr" else name_en,  # names are EN/TR only; others get EN
+                name=name_tr if locale == "tr" else name_en,
                 category=cat,
                 subcategory=sub,
                 colors=colors,

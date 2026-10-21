@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from .vocab import LANGS
 
-from .vocab import LANGS
 
 Lang = Literal[*LANGS]  # the one list lives in vocab.py; a Literal keeps the OpenAPI enum
 Category = Literal["top", "bottom", "dress", "outerwear", "shoes", "accessory", "bag"]

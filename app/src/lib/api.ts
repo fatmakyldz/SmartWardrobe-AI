@@ -46,7 +46,7 @@ export type User = {
   id: string;
   email: string;
   name: string;
-  locale: Lang;
+  locale: string; // the server's list may be ahead of or behind the app's; toLang() narrows it
   city: string;
   lat: number | null;
   lon: number | null;
@@ -268,12 +268,12 @@ export const api = {
     email: string;
     password: string;
     name: string;
-    locale: string;
+    locale: Lang;
     claim_demo_token?: string;
     keep_demo_items?: boolean;
   }) => request<Session & { claimed: Record<string, number | boolean> | null }>('/auth/register', json('POST', b)),
   login: (b: { email: string; password: string }) => request<Session>('/auth/login', json('POST', b)),
-  demo: (locale: string, style_profile?: StylePatch) =>
+  demo: (locale: Lang, style_profile?: StylePatch) =>
     request<Session>('/auth/demo', json('POST', style_profile ? { locale, style_profile } : { locale })),
   logout: () => request<void>('/auth/logout', json('POST', WEB ? undefined : { refresh: refreshToken })),
   verifyEmail: (t: string) => request<User>('/auth/verify', json('POST', { token: t })),

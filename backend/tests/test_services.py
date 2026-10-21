@@ -308,13 +308,15 @@ def test_outfit_item_rows_follow_item_deletion(client, auth):
 
 
 def test_language_lists_agree_and_unknown_codes_fall_back_to_english():
-    """One list (vocab.LANGS) drives the API enum, the prompt names, the e-mail templates and the demo names."""
-    from app.schemas import Lang
-    from app.services.email import OPEN_IN_APP, TEMPLATES
-    from app.vocab import LANG_NAME, LANGS, normalize_lang
+    """One list (vocab.LANGS) drives the API enum, the prompt names, the e-mail templates and the demo city."""
     from typing import get_args
 
-    assert set(get_args(Lang)) == set(LANGS) == set(LANG_NAME) == set(OPEN_IN_APP)
+    from app.schemas import Lang
+    from app.services.demo import DEMO_CITY
+    from app.services.email import OPEN_IN_APP, TEMPLATES
+    from app.vocab import LANG_NAME, LANGS, normalize_lang
+
+    assert set(get_args(Lang)) == set(LANGS) == set(LANG_NAME) == set(OPEN_IN_APP) == set(DEMO_CITY)
     assert all(set(t) == set(LANGS) for t in TEMPLATES.values())
     assert [normalize_lang(x) for x in ("tr", "TR", "tr-TR", "en", "de", "", None)] == ["tr", "tr", "tr", "en", "en", "en", "en"]
     assert profile.build_summary([[Item(category="top", subcategory="tee", colors=["red"], formality=2)]], [], "de").startswith("Likes")
