@@ -6,14 +6,13 @@ reaches the suggest prompt. PII is masked before the request leaves the server.
 
 import uuid
 
-from ...vocab import CATEGORIES, COLORS, OCCASIONS, PATTERNS
+from ...vocab import CATEGORIES, COLORS, LANG_NAME, OCCASIONS, PATTERNS
 from ..context import mask_pii
 from ..gateway import AIRequest, AIResponse, BudgetGate, complete
 from ..providers import TextPart
 from ..schemas.context import IntentDTO
 from ..schemas.intent import IntentOut
 
-LANG_NAME = {"en": "English", "tr": "Turkish"}
 PROMPT_VERSION = "v1"
 REQUEST_CHARS = 200
 

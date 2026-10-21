@@ -8,7 +8,7 @@ from ..schemas import CityOut, VocabOut, WeatherOut
 from ..security import current_user
 from ..services import images
 from ..storage import cache_control, get_storage
-from ..vocab import CATEGORIES, COLORS, OCCASIONS, PALETTES, PATTERNS, PRIORITIES, SEASONS, STYLES
+from ..vocab import CATEGORIES, COLORS, OCCASIONS, PALETTES, PATTERNS, PRIORITIES, SEASONS, STYLES, normalize_lang
 from ..weather import get_weather, search_city
 
 router = APIRouter(tags=["misc"])
@@ -25,7 +25,7 @@ def weather(
 
 @router.get("/cities", response_model=list[CityOut])
 def cities(q: str = Query(min_length=2, max_length=80), lang: str = "en", _: User = Depends(current_user)):
-    return search_city(q, "tr" if lang == "tr" else "en")
+    return search_city(q, normalize_lang(lang))
 
 
 @router.get("/images/{key:path}")

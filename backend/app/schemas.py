@@ -4,7 +4,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-Lang = Literal["en", "tr"]
+from .vocab import LANGS
+
+
+Lang = Literal[*LANGS]  # the one list lives in vocab.py; a Literal keeps the OpenAPI enum
 Category = Literal["top", "bottom", "dress", "outerwear", "shoes", "accessory", "bag"]
 Occasion = Literal["casual", "work", "formal", "date", "sport", "party", "travel"]
 

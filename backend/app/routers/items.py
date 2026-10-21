@@ -19,6 +19,7 @@ from ..security import current_user
 from ..serialize import item_out
 from ..services import images, orchestration, wardrobe
 from ..storage import get_storage
+from ..vocab import normalize_lang
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -44,7 +45,7 @@ def analyze(
 
     s = get_settings()
     key, small = images.store_upload(db, user, image.file.read(s.max_upload_mb * 1024 * 1024 + 1), s.max_upload_mb)
-    lang = "tr" if lang == "tr" else "en"
+    lang = normalize_lang(lang)
 
     # The same photo sent twice within a minute (double tap, retry) is tagged once.
     same_photo = idempotency_key or f"{hashlib.sha256(small).hexdigest()}:{lang}"

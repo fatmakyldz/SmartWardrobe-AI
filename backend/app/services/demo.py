@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..models import FeedbackEvent, Item, Outfit, OutfitItem, User
 from ..security import hash_password
+from ..vocab import normalize_lang
 from .images import copy_shared_image, demo_key, ensure_demo_images
 from .profile import delete_account, update_style
 
@@ -41,6 +42,7 @@ DEMO_LAT, DEMO_LON = 41.0082, 28.9784
 
 
 def create_demo_user(db: Session, locale: str, style_profile: dict | None = None) -> User:
+    locale = normalize_lang(locale)  # names and city exist in EN and TR; anything else reads the EN ones
     # The 17 pictures are shared by every demo account (§14 C5): uploaded once, never copied per visitor.
     ensure_demo_images(db, [row[0] for row in DEMO_ITEMS])
     user = User(

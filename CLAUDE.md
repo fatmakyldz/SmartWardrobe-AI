@@ -34,4 +34,5 @@ CI (`.github/workflows/`) runs the same: `pytest -q` on SQLite and Postgres plus
 - Routers don't write to the DB: they call `app/services/`. Services never import `app.ai` (except `orchestration.py`, which only builds DTOs); `ai/context.py` stays pure (DTOs in, DTO out, `today` passed in).
 - Errors are `{"detail": {"code": "..."}}`; the app translates the code.
 - New settings go in `backend/app/config.py` and `backend/.env.example`.
+- Languages: `backend/app/vocab.py` (`LANGS`, `LANG_NAME`, `normalize_lang`) and `app/src/lib/langs.ts` (`SUPPORTED_LANGS`) are the only lists; unknown codes fall back to English. Adding a language is mostly translation (app dictionary, e-mail templates) plus generalising the EN/TR-only branches that still exist in `services/profile.py` (summary templates) and `services/demo.py` (piece names, city).
 - Behaviour changes come with tests; keep existing tests green.
