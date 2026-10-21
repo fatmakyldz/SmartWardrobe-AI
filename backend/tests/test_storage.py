@@ -281,6 +281,9 @@ def test_local_storage_round_trip_and_key_safety(tmp_path):
         st.delete_prefix(db, "u/abc/")
         assert [k for k, _ in st.list_keys(db)] == ["demo/shared.webp"]
         for bad in ("../etc/passwd", "u/../../x", "", "/abs"):
+            assert st.get(db, bad) is None and not st.exists(db, bad)  # hostile keys are simply not found
             with pytest.raises(ValueError):
-                st.get(db, bad)
+                st.put(db, bad, b"x", "image/webp")
+        (tmp_path / "demo" / "half.webp.tmp").write_bytes(b"partial")
+        assert [k for k, _ in st.list_keys(db)] == ["demo/shared.webp"]  # in-flight writes are hidden
     assert not (tmp_path / "u").exists() or not any((tmp_path / "u").rglob("*.webp"))

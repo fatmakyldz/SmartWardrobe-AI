@@ -223,3 +223,49 @@ def test_cleanup_refuses_while_an_item_has_no_wardrobe_images_row(migrate):
     with pytest.raises(Exception, match="no wardrobe_images row"):
         migrate("upgrade", "0004_cleanup")
     assert "images" in sa.inspect(engine).get_table_names()
+
+
+def _user_and_item(now):
+    items_t = _table("items", id=sa.Uuid, user_id=sa.Uuid, created_at=TS, updated_at=TS)
+    users_t = _table("users", id=sa.Uuid, created_at=TS, updated_at=TS)
+    wi_t = _table("wardrobe_images", user_id=sa.Uuid, item_id=sa.Uuid, created_at=TS, attached_at=TS)
+    me, item = uuid.uuid4(), uuid.uuid4()
+    key = f"u/{me.hex}/a.webp"
+    with engine.begin() as conn:
+        conn.execute(users_t.insert().values(id=me, email="x@example.com", password_hash="x", name="", locale="en", city="",
+                                             is_demo=False, created_at=now, updated_at=now, token_version=0, plan="free"))
+        conn.execute(items_t.insert().values(id=item, user_id=me, image_key=key, name="", category="top", subcategory="",
+                                             colors=[], pattern="solid", warmth=3, formality=2, seasons=[], created_at=now,
+                                             updated_at=now, brand="", material="", is_favorite=False, wear_count=0))
+        conn.execute(wi_t.insert().values(key=key, user_id=me, item_id=item, content_type="image/webp", bytes=1, width=1,
+                                          height=1, created_at=now, attached_at=now))
+    return me, item
+
+
+def _outfit(me, item_ids, now):
+    outfits_t = _table("outfits", id=sa.Uuid, user_id=sa.Uuid, item_ids=sa.JSON, created_at=TS, updated_at=TS)
+    oid = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(outfits_t.insert().values(id=oid, user_id=me, occasion="casual", note="", weather={}, item_ids=item_ids,
+                                               title="", reason="", lang="en", rating=0, source="ai", created_at=now, updated_at=now))
+    return oid
+
+
+def test_cleanup_accepts_outfits_whose_pieces_were_all_deleted(migrate):
+    """No outfit_items rows + a stale item_ids list (the pieces are gone) is the normal state, not 'unmigrated'."""
+    migrate("upgrade", "0003_ai_estimate")
+    now = datetime.now(timezone.utc)
+    me, _ = _user_and_item(now)
+    _outfit(me, [str(uuid.uuid4()), "not-a-uuid"], now)  # deleted piece + garbage
+    migrate("upgrade", "0004_cleanup")
+    assert "item_ids" not in _columns("outfits")
+
+
+def test_cleanup_refuses_an_outfit_whose_live_piece_is_only_in_item_ids(migrate):
+    migrate("upgrade", "0003_ai_estimate")
+    now = datetime.now(timezone.utc)
+    me, item = _user_and_item(now)
+    _outfit(me, [str(item)], now)  # live piece, no outfit_items row: 0002's data step never saw it
+    with pytest.raises(Exception, match="only in item_ids"):
+        migrate("upgrade", "0004_cleanup")
+    assert "item_ids" in _columns("outfits")

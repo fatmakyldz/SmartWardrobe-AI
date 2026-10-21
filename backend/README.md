@@ -77,7 +77,7 @@ New accounts get a verification email (Resend, `RESEND_API_KEY`, sender `EMAIL_F
 
 ### History: the move to the bucket
 
-Production photos lived in Postgres (`images` table) until 22 Oct 2026, when `scripts/migrate_images_to_r2.py` copied the 73 objects to R2 and `--verify` passed; `STORAGE_BACKEND=s3` has been live since. `0004_cleanup` (AI-09c) then dropped the `images` table and `outfits.item_ids` — it refuses to run while an item has no `wardrobe_images` row — and the migration script was retired (`git log -- backend/scripts/migrate_images_to_r2.py` has it). There is no `db` storage mode any more; `STORAGE_BACKEND=db` is read as `local`.
+Production photos lived in Postgres (`images` table) until 22 Oct 2026, when `scripts/migrate_images_to_r2.py` copied the 73 objects to R2 and `--verify` passed; `STORAGE_BACKEND=s3` has been live since. `0004_cleanup` (AI-09c; the foundation doc calls it `0003_cleanup`) then dropped the `images` table and `outfits.item_ids`. It refuses to run while an item has no `wardrobe_images` row or an outfit's live pieces exist only in `item_ids`; both guards run before any DDL, so a refusal leaves the database untouched — but the Space runs `alembic upgrade head` before uvicorn, so a refusal means **the API is down until the merge is reverted** (the reverted code still matches schema 0003) or the rows are fixed and the Space restarted. Hence: take a Neon branch *before merging to main*, because merge = deploy = apply. The downgrade recreates the table and column empty. The migration script was retired (`git log -- backend/scripts/migrate_images_to_r2.py` has it). There is no `db` storage mode any more; `STORAGE_BACKEND=db` is read as `local`.
 
 ## Endpoints
 

@@ -194,7 +194,7 @@ def cleanup_orphans(db: Session, now: datetime | None = None, dry_run: bool = Fa
 def reconcile(db: Session, now: datetime | None = None, dry_run: bool = False) -> CleanupReport:
     """Both directions: bucket objects without a row (older than 24 h, so uploads in flight are safe)
     are deleted; rows whose object is gone are reported. An object an item still points at is never
-    treated as stray, even without a row (e.g. before migrate_images_to_r2.py has run)."""
+    treated as stray, even without a row."""
     now, report = now or _now(), CleanupReport()
     cutoff = now - ORPHAN_AGE
     storage = get_storage()

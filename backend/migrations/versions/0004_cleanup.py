@@ -10,6 +10,7 @@ Revises: 0003_ai_estimate
 Create Date: 2026-10-20
 
 """
+import uuid
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -29,16 +30,42 @@ def upgrade() -> None:
     ))
     if missing:
         raise RuntimeError(f"{missing} item(s) have no wardrobe_images row; run scripts/migrate_images_to_r2.py first")
-    unmigrated = bind.scalar(sa.text(
-        "SELECT count(*) FROM outfits o WHERE NOT EXISTS (SELECT 1 FROM outfit_items oi WHERE oi.outfit_id = o.id)"
-        " AND o.item_ids IS NOT NULL AND CAST(o.item_ids AS TEXT) NOT IN ('[]', 'null')"
-    ))
+    # An outfit with no outfit_items rows is only "unmigrated" if its item_ids still name a live piece of the
+    # same user. Outfits whose pieces were all deleted also have no rows (ON DELETE CASCADE) but a stale
+    # non-empty list — those are fine to lose. Checked in Python, like 0002's planner did.
+    unmigrated = _outfits_still_only_in_item_ids(bind)
     if unmigrated:
-        raise RuntimeError(f"{unmigrated} outfit(s) still only have item_ids")
+        raise RuntimeError(f"{unmigrated} outfit(s) have live pieces only in item_ids; 0002's data step did not run on them")
 
     op.drop_table("images")
     with op.batch_alter_table("outfits") as b:
         b.drop_column("item_ids")
+
+
+_outfits = sa.table("outfits", sa.column("id", sa.Uuid), sa.column("user_id", sa.Uuid), sa.column("item_ids", sa.JSON))
+_links = sa.table("outfit_items", sa.column("outfit_id", sa.Uuid))
+_items = sa.table("items", sa.column("id", sa.Uuid), sa.column("user_id", sa.Uuid))
+
+
+def _parse(value) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _outfits_still_only_in_item_ids(bind) -> int:
+    bare = bind.execute(
+        sa.select(_outfits.c.id, _outfits.c.user_id, _outfits.c.item_ids)
+        .where(~sa.exists().where(_links.c.outfit_id == _outfits.c.id))
+    ).all()
+    count = 0
+    for o in bare:
+        ids = {_parse(x) for x in (o.item_ids or [])} - {None}
+        if ids and bind.scalar(sa.select(sa.func.count()).select_from(_items)
+                               .where(_items.c.id.in_(ids), _items.c.user_id == o.user_id)):
+            count += 1
+    return count
 
 
 def downgrade() -> None:

@@ -43,6 +43,7 @@ class LocalStorage:
         return path
 
     def put(self, db: Session, key: str, data: bytes, content_type: str) -> None:
+        # content_type is not stored: get() derives it from the extension (every key is .webp today).
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
@@ -50,13 +51,19 @@ class LocalStorage:
         tmp.replace(path)  # atomic: a reader never sees a half-written file
 
     def get(self, db: Session, key: str) -> tuple[bytes, str] | None:
-        path = self._path(key)
+        try:
+            path = self._path(key)
+        except ValueError:  # a hostile key (../) is simply not found
+            return None
         if not path.is_file():
             return None
         return path.read_bytes(), mimetypes.guess_type(path.name)[0] or "application/octet-stream"
 
     def exists(self, db: Session, key: str) -> bool:
-        return self._path(key).is_file()
+        try:
+            return self._path(key).is_file()
+        except ValueError:
+            return False
 
     def copy(self, db: Session, src: str, dst: str) -> None:
         found = self.get(db, src)
