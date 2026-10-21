@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from ..ai import analysis
+from ..ai import AIError, analysis
 from ..ai.context import build_capsule_context, build_suggest_context, season_of
 from ..ai.features import capsule as capsule_feature
 from ..ai.features import intent as intent_feature
@@ -83,6 +83,12 @@ def suggest(
     intent = None
     if body.request and body.request.strip():
         require_feature(ent, "intent")
+        # Free text costs two counted requests (intent, then suggest): refuse up front rather than spend
+        # the last request on the parse and fail on the suggestion.
+        decision = UserBudget(user, ent).check("suggest", 0)
+        if decision.remaining_requests is not None and decision.remaining_requests < 2:
+            raise AIError("budget_exceeded", reset_at=decision.reset_at,
+                          remaining={"requests": decision.remaining_requests, "tokens": decision.remaining_tokens})
         parsed, _ = intent_feature.parse_request(
             body.request, body.lang, subject_id=user.id, tier=ent.model_tier, budget=UserBudget(user, ent),
             idempotency_key=f"{idempotency_key}:intent" if idempotency_key else None,
@@ -128,12 +134,12 @@ def capsule(
     inputs = orchestration.wardrobe_inputs(user, body.lat)
     season = season_of(datetime.now(timezone.utc).date(), inputs.southern_hemisphere)
     built = analysis.build_capsule(inputs.items, tuple(body.occasions), season, body.size)
-    if not built.items:
-        raise HTTPException(400, detail={"code": "wardrobe_incomplete"})
+    if not built.items or built.outfits_possible == 0:
+        raise HTTPException(400, detail={"code": "wardrobe_incomplete"})  # never explain zero outfits
 
     summary, tips = None, []
     if body.explain:
-        ctx = build_capsule_context(built, body.lang)
+        ctx = build_capsule_context(built)
         out, _ = capsule_feature.explain(ctx, body.lang, subject_id=user.id, tier=ent.model_tier,
                                          budget=UserBudget(user, ent), idempotency_key=idempotency_key)
         summary, tips = out.summary, out.tips

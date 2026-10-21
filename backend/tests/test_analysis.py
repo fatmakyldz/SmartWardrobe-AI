@@ -79,9 +79,10 @@ def test_cold_season_without_a_warm_layer_and_summer_only_wardrobe():
     winter = analyze(light, "winter")
     assert ("season_uncovered", "top", None) in codes(winter)  # nothing for winter at all
 
-    no_coat = wardrobe()
-    no_coat = [i for i in no_coat if i.category != "outerwear"]
+    no_coat = [i for i in wardrobe() if i.category != "outerwear"]
     assert ("season_uncovered", "outerwear", None) in codes(analyze(no_coat, "winter"))
+    linen = [*no_coat, item("outerwear", 30, warmth=3, seasons=S)]  # a summer jacket doesn't count in winter
+    assert ("season_uncovered", "outerwear", None) in codes(analyze(linen, "winter"))
     assert ("season_uncovered", "outerwear", None) not in codes(analyze(no_coat, "summer"))
 
 
@@ -144,7 +145,7 @@ def test_capsule_gaps_only_mention_the_asked_occasions():
 
 def test_capsule_context_names_pieces_by_number_never_by_id():
     c = build_capsule(wardrobe(), ("casual", "work"), "autumn", size=8)
-    ctx = build_capsule_context(c, "en")
+    ctx = build_capsule_context(c)
     assert ctx.text.startswith("CAPSULE for casual, work (autumn): 8 pieces")
     assert "0: " in ctx.text and "EXAMPLE OUTFITS" in ctx.text
     assert not any(str(i.id) in ctx.text for i in c.items)

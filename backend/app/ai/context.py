@@ -9,6 +9,7 @@ from datetime import date
 
 from ..vocab import OCCASION_FORMALITY
 from ..weather import describe
+from .analysis import Capsule
 from .schemas.context import (
     DEFAULT_LIMITS,
     CapsuleContext,
@@ -76,8 +77,8 @@ def _passes(item: ItemDTO, rule: str, season: str, feels: float | None, window: 
     if rule == "season":
         return not item.seasons or season in item.seasons
     if rule == "warmth":
-        if feels is None:
-            return True
+        if feels is None or (intent is not None and item.category in intent.include_categories):
+            return True  # "add a jacket" on a warm day is still the user's call
         if feels > limits.hot_feels_like and item.warmth >= 4:
             return False
         if feels < limits.cold_feels_like and item.warmth <= 1:
@@ -165,9 +166,9 @@ def request_line(intent: IntentDTO | None, avoids_relaxed: bool = False) -> str 
         return None
     parts = []
     if intent.brief:
-        parts.append(intent.brief)
+        parts.append(f'user asked for: "{intent.brief}"')  # quoted: data, not an instruction
     if intent.include_categories or intent.include_colors:
-        parts.append("must use " + ", ".join([*intent.include_categories, *intent.include_colors]))
+        parts.append("prefer using " + ", ".join([*intent.include_categories, *intent.include_colors]))
     if intent.wants_outerwear is True:
         parts.append("add outerwear")
     elif intent.wants_outerwear is False:
@@ -231,7 +232,7 @@ def build_suggest_context(
     )
 
 
-def build_capsule_context(capsule, lang: str) -> CapsuleContext:
+def build_capsule_context(capsule: Capsule) -> CapsuleContext:
     """What the model sees when explaining a deterministic capsule (ai.analysis.Capsule): the pieces under
     their numbers, the occasions and season, the outfit count and the gaps. No user text, no ids."""
     items = list(capsule.items)

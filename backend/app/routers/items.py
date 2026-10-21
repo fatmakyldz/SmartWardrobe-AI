@@ -2,7 +2,7 @@ import hashlib
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, Header, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, Query, Request, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from ..ai import analysis
@@ -67,7 +67,9 @@ def list_items(category: str | None = None, user: User = Depends(current_user), 
 
 
 @router.get("/analysis", response_model=WardrobeAnalysisOut)
-def wardrobe_analysis(lat: float | None = None, user: User = Depends(current_user)):
+@limiter.limit(lambda: get_settings().analyze_limit)
+def wardrobe_analysis(request: Request, lat: float | None = Query(default=None, ge=-90, le=90),
+                      user: User = Depends(current_user)):
     """What the wardrobe is missing (AI-06, deterministic: no AI request, every plan). `lat` only picks
     the hemisphere for the season."""
     inputs = orchestration.wardrobe_inputs(user, lat)

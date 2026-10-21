@@ -64,7 +64,7 @@ def test_avoided_pieces_leave_the_context_unless_that_leaves_no_outfit():
     kept, relaxed = prefilter(only_dress, "casual", None, "autumn", intent=IntentDTO(avoid_categories=("dress",)))
     assert len(kept) == 2 and relaxed == ("season", "warmth", "formality", "request")
     c = ctx(only_dress, intent=IntentDTO(avoid_categories=("dress",), brief="no dress please"))
-    assert "REQUEST: no dress please; avoid dress" in c.text
+    assert 'REQUEST: user asked for: "no dress please"; avoid dress' in c.text
 
 
 def test_request_line_and_occasion_override():
@@ -72,7 +72,7 @@ def test_request_line_and_occasion_override():
     assert request_line(IntentDTO()) is None
     line = request_line(IntentDTO(include_categories=("outerwear",), include_colors=("navy",), wants_outerwear=False,
                                   brief="Smart but warm."))
-    assert line == "REQUEST: Smart but warm.; must use outerwear, navy; no outerwear"
+    assert line == 'REQUEST: user asked for: "Smart but warm."; prefer using outerwear, navy; no outerwear'
     c = ctx([item("top", 1, formality=3), item("bottom", 2, formality=3)], occasion="casual",
             intent=IntentDTO(occasion="work"))
     assert c.text.startswith("OCCASION: work")
@@ -114,7 +114,7 @@ def test_intent_route_parses_and_counts_a_request(client, auth, fake_ai):
     assert model == routing.chain("intent", "standard")[0].model
     assert "Request: warm smart look" in call.parts[0].text and "wardrobe app" in call.system
     assert _ai_rows() == [("intent", "ok", 150)]
-    assert client.get("/me/usage", headers=auth).status_code in (200, 404)
+    assert client.post("/outfits/intent", json={"text": "   "}, headers=auth).status_code == 422
 
 
 def test_intent_masks_pii_and_honours_the_plan(client, auth, fake_ai):
@@ -153,12 +153,41 @@ def test_suggest_with_free_text_runs_intent_first(client, fake_weather, fake_ai)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["intent"]["occasion"] == "work" and body["outfits"][0]["occasion"] == "work"
-    assert prompts[0].startswith("OCCASION: work") and "REQUEST: Warm smart look" in prompts[0]
+    assert prompts[0].startswith("OCCASION: work") and 'REQUEST: user asked for: "Warm smart look' in prompts[0]
     assert [f for f, s, _ in _ai_rows() if s == "ok"] == ["intent", "suggest"]
 
     # Without free text nothing changes: one request, no intent in the answer.
     r = client.post("/outfits/suggest", json={"occasion": "casual"}, headers=demo)
     assert r.json()["intent"] is None and len(_ai_rows()) == 3
+
+
+def test_avoided_patterns_and_wanted_outerwear_survive_the_prefilter():
+    from app.ai.schemas.context import WeatherDTO
+
+    from dataclasses import replace
+
+    items = [item("top", 1), replace(item("top", 2), pattern="floral"), item("bottom", 3),
+             item("outerwear", 4, warmth=4)]
+    hot = WeatherDTO(temp=30, feels_like=30)
+    kept, _ = prefilter(items, "casual", hot, "summer", intent=IntentDTO(avoid_patterns=("floral",)))
+    assert {i.id for i in kept} == {item("top", 1).id, item("bottom", 3).id}  # warm coat and floral top out
+    kept, _ = prefilter(items, "casual", hot, "summer", intent=IntentDTO(include_categories=("outerwear",)))
+    assert item("outerwear", 4).id in {i.id for i in kept}  # asked for a jacket: the warmth rule steps aside
+
+
+def test_free_text_suggest_refuses_when_fewer_than_two_requests_remain(client, fake_weather, fake_ai):
+    from app.entitlements import consume
+
+    demo = {"Authorization": f"Bearer {client.post('/auth/demo', json={}).json()['access']}"}
+    with SessionLocal() as db:
+        uid = db.query(User).filter(User.is_demo).one().id
+        consume(db, uid, "suggest", tokens=10, requests=4)  # 4 of the demo plan's 5 spent
+        db.commit()
+    r = client.post("/outfits/suggest", json={"request": "something warm"}, headers=demo)
+    assert r.status_code == 429 and r.json()["detail"]["code"] == "budget_exceeded"
+    assert fake_ai.calls == [] and _ai_rows() == []  # nothing spent on the parse
+    fake_ai.respond = lambda call, model: {"outfits": [{"title": "t", "items": wardrobe(call)["top"][:1] + wardrobe(call)["bottom"][:1], "reason": "r"}]}
+    assert client.post("/outfits/suggest", json={}, headers=demo).status_code == 200  # the last plain one
 
 
 def test_capsule_route_builds_explains_and_routes_premium_to_the_mid_model(client, auth, fake_ai):
@@ -197,7 +226,11 @@ def test_capsule_needs_pieces_and_a_bad_explanation_is_a_502(client, auth, fake_
     uid = _uid()
     _grant(uid, feature="capsule")
     assert client.post("/outfits/capsule", json={}, headers=auth).json()["detail"]["code"] == "wardrobe_incomplete"
-    _fill_wardrobe(uid, [("top", ("white",), 2), ("bottom", ("blue",), 2)])
+    _fill_wardrobe(uid, [("top", ("white",), 2)] * 8)  # pieces but no outfit: still incomplete, no request spent
+    r = client.post("/outfits/capsule", json={"occasions": ["casual"]}, headers=auth)
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "wardrobe_incomplete" and fake_ai.calls == []
+    assert client.post("/outfits/capsule", json={"occasions": []}, headers=auth).status_code == 422
+    _fill_wardrobe(uid, [("bottom", ("blue",), 2)])
     fake_ai.respond = lambda call, model: {"summary": "", "tips": []}
     r = client.post("/outfits/capsule", json={"occasions": ["casual"]}, headers=auth)
     assert r.status_code == 502 and r.json()["detail"]["code"] == "ai_bad_reply"

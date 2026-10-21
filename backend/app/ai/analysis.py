@@ -114,11 +114,11 @@ def cores(items) -> list[tuple[ItemDTO, ...]]:
     return result
 
 
-def outfits(items) -> list[tuple[ItemDTO, ...]]:
+def outfits(items, known_cores: list[tuple[ItemDTO, ...]] | None = None) -> list[tuple[ItemDTO, ...]]:
     """Cores completed with shoes when the wardrobe has any: the outfits one could actually wear."""
     shoes = _by_category(items)["shoes"]
     result = []
-    for core in cores(items):
+    for core in known_cores if known_cores is not None else cores(items):
         fitting = [s for s in shoes if shoes_ok(s, core)]
         if not shoes:
             result.append(core)
@@ -141,10 +141,10 @@ def _sort_key(item: ItemDTO):
 def analyze(items: list[ItemDTO], season: str) -> Analysis:
     active = sorted((i for i in items if not i.archived), key=_sort_key)
     by = _by_category(active)
-    all_outfits = outfits(active)
+    all_cores = cores(active)  # computed once; the orphan check and the outfit count reuse it
     neutral_share = round(sum(1 for i in active if is_neutral(i)) / len(active), 2) if active else 0.0
     stats = WardrobeStats(items=len(active), per_category={c: len(v) for c, v in by.items() if v},
-                          outfits_possible=len(all_outfits), neutral_share=neutral_share)
+                          outfits_possible=_count_outfits(all_cores, by["shoes"]), neutral_share=neutral_share)
     gaps: list[Gap] = []
 
     if not active:
@@ -168,7 +168,7 @@ def analyze(items: list[ItemDTO], season: str) -> Analysis:
     in_season_items = [i for i in active if in_season(i, season)]
     if not cores(in_season_items):
         gaps.append(Gap("season_uncovered", category=_missing_core(in_season_items), season=season, severity=2))
-    elif season in COLD_SEASONS and not any(i.warmth >= 3 for i in by["outerwear"]):
+    elif season in COLD_SEASONS and not any(i.warmth >= 3 and in_season(i, season) for i in by["outerwear"]):
         gaps.append(Gap("season_uncovered", category="outerwear", season=season, severity=2))
 
     # 1 — nice to have
@@ -176,8 +176,8 @@ def analyze(items: list[ItemDTO], season: str) -> Analysis:
         gaps.append(Gap("few_shoes", category="shoes", severity=1))
     if len(active) >= 6 and neutral_share < 1 / 3:
         gaps.append(Gap("low_neutrals", category="top" if len(by["top"]) <= len(by["bottom"]) else "bottom", severity=1))
-    orphans = tuple(i.id for i in active if i.category in ("top", "bottom", "dress", "shoes", "outerwear")
-                    and _is_orphan(i, active))
+    orphans = tuple(i.id for i in active if i.category in ("top", "bottom", "shoes", "outerwear")
+                    and _is_orphan(i, by, all_cores))
     if orphans:
         gaps.append(Gap("orphan_items", severity=1, item_ids=orphans))
 
@@ -196,17 +196,19 @@ def _missing_core(items: list[ItemDTO]) -> str:
     return "bottom" if len(by["bottom"]) <= len(by["top"]) else "top"
 
 
-def _is_orphan(item: ItemDTO, active: list[ItemDTO]) -> bool:
-    others = [o for o in active if o.id != item.id]
-    by = _by_category(others)
+def _is_orphan(item: ItemDTO, by: dict[str, list[ItemDTO]], all_cores: list[tuple[ItemDTO, ...]]) -> bool:
     if item.category == "top":
         return bool(by["bottom"]) and not any(pair_ok(item, b) for b in by["bottom"])
     if item.category == "bottom":
         return bool(by["top"]) and not any(pair_ok(t, item) for t in by["top"])
-    if item.category in ("shoes", "outerwear"):
-        core = cores(others)
-        return bool(core) and not any(shoes_ok(item, c) for c in core)
-    return False  # a dress is an outfit by itself
+    # shoes / outerwear: no core (none of which contains this piece) to go with
+    return bool(all_cores) and not any(shoes_ok(item, c) for c in all_cores)
+
+
+def _count_outfits(all_cores: list[tuple[ItemDTO, ...]], shoes: list[ItemDTO]) -> int:
+    if not shoes:
+        return len(all_cores)
+    return sum(sum(1 for s in shoes if shoes_ok(s, c)) for c in all_cores)
 
 
 # ── capsule ───────────────────────────────────────────────────────────────

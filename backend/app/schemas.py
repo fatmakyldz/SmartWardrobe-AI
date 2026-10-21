@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 Lang = Literal["en", "tr"]
 Category = Literal["top", "bottom", "dress", "outerwear", "shoes", "accessory", "bag"]
@@ -151,6 +151,14 @@ class IntentIn(BaseModel):
     text: str = Field(min_length=1, max_length=200)
     lang: Lang = "en"
 
+    @field_validator("text")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not v:
+            raise ValueError("text is blank")
+        return v
+
 
 class IntentOut(BaseModel):
     """A natural-language request as vocabulary values (AI-06)."""
@@ -204,7 +212,7 @@ class WardrobeAnalysisOut(BaseModel):
 
 
 class CapsuleIn(BaseModel):
-    occasions: list[Occasion] = Field(default=["casual", "work"], max_length=7)
+    occasions: list[Occasion] = Field(default=["casual", "work"], min_length=1, max_length=7)
     size: int = Field(default=12, ge=6, le=20)
     lang: Lang = "en"
     explain: bool = True  # False: the deterministic capsule only, no AI request spent
