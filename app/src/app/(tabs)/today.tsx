@@ -6,11 +6,11 @@ import { ActivityIndicator, Pressable, useWindowDimensions, View } from 'react-n
 import { CityPicker } from '@/components/CityPicker';
 import { Button, Chip, Field, Notice, Screen, T, tap } from '@/components/ui';
 import { OutfitBoard } from '@/components/wardrobe';
-import { api, Intent, Occasion, OCCASIONS, Outfit } from '@/lib/api';
+import { api, Gap, Intent, Item, Occasion, OCCASIONS, Outfit } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useErrorText } from '@/lib/errors';
 import { skyKey, useI18n } from '@/lib/i18n';
-import { useFeedback, useItems, useLatestIntent, useLatestOutfits, useOutfits, useSuggest, useWorn } from '@/lib/queries';
+import { useAnalysis, useFeedback, useItems, useLatestIntent, useLatestOutfits, useOutfits, useSuggest, useWorn } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
 
 export default function Today() {
@@ -43,6 +43,9 @@ export default function Today() {
 
   const cats = new Set((items.data ?? []).map((i) => i.category));
   const ready = cats.has('dress') || (cats.has('top') && cats.has('bottom'));
+  // Progressive wardrobe: one nudge at a time, deterministic, no AI request. Demo wardrobes are complete.
+  const analysis = useAnalysis(!!user && !user.is_demo && ready);
+  const nudge = ready ? pickNudge(analysis.data?.gaps ?? [], items.data ?? []) : null; // below 'ready' the incomplete notice says it all
 
   // The first outfit comes without a tap (§10 step 2, and the first-pieces flow): once per account,
   // only while it has no outfit at all, so coming back to the tab doesn't spend another request.
@@ -180,6 +183,22 @@ export default function Today() {
         </View>
       )}
 
+      {nudge ? (
+        <View style={{ marginTop: space.xl, padding: space.lg, borderRadius: 16, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line, gap: space.sm }}>
+          <T variant="small" color="muted">
+            {t.today.nudgeTitle}
+          </T>
+          <T variant="body">{nudgeText(nudge, t, lang)}</T>
+          {nudge.gap.category ? (
+            <Button
+              label={t.today.nudgeAdd(t.categories[nudge.gap.category])}
+              kind="secondary"
+              onPress={() => router.push({ pathname: '/item/new', params: { category: nudge.gap.category! } })}
+            />
+          ) : null}
+        </View>
+      ) : null}
+
       <View style={{ gap: space.xxl, marginTop: space.xxl }}>
         {autoShown && outfits.length ? <Notice>{user?.is_demo ? t.today.firstDemo : t.today.firstAuto}</Notice> : null}
         {worn.isError ? <Notice tone="error">{errorText(worn.error)}</Notice> : null}
@@ -200,6 +219,34 @@ export default function Today() {
       </View>
     </Screen>
   );
+}
+
+type Nudge = { gap: Gap; piece: Item | null };
+
+// Which gap to show: what blocks outfits first, then the one tied to a specific piece (the most
+// personal), then the rest. One card, so adding a piece changes it rather than stacking.
+const NUDGE_ORDER: Gap['code'][] = ['missing_category', 'occasion_uncovered', 'few_partners', 'orphan_items', 'season_uncovered', 'few_shoes', 'low_neutrals'];
+const EVERYDAY = new Set(['casual', 'work']);
+
+// Everyday occasions first; a missing black-tie top is not the next thing a 3-piece wardrobe needs.
+function rank(g: Gap): number {
+  const base = NUDGE_ORDER.indexOf(g.code);
+  return g.code === 'occasion_uncovered' && !EVERYDAY.has(g.occasion ?? '') ? NUDGE_ORDER.indexOf('season_uncovered') + 0.5 : base;
+}
+
+function pickNudge(gaps: Gap[], items: Item[]): Nudge | null {
+  const sorted = [...gaps].sort((a, b) => rank(a) - rank(b));
+  const gap = sorted.find((g) => NUDGE_ORDER.includes(g.code));
+  if (!gap) return null;
+  const piece = gap.item_ids.length ? (items.find((i) => i.id === gap.item_ids[0]) ?? null) : null;
+  return { gap, piece };
+}
+
+function nudgeText(n: Nudge, t: ReturnType<typeof useI18n>['t'], lang: string): string {
+  const category = n.gap.category ? t.categories[n.gap.category] : '';
+  const occasion = n.gap.occasion ? t.occasions[n.gap.occasion].toLocaleLowerCase(lang) : '';
+  const piece = n.piece ? n.piece.name || t.categories[n.piece.category] : '';
+  return t.today.nudge(n.gap.code, category, occasion, piece);
 }
 
 /** "work · no dress · with navy · with a layer" — the parsed request in the user's words. */

@@ -8,7 +8,7 @@ from ..providers import ImagePart, TextPart
 from ..schemas import TaggingOut
 
 LANG_NAME = {"en": "English", "tr": "Turkish"}
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"  # v1 + confidence / uncertain fields
 
 
 def tag_image(

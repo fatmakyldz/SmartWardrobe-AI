@@ -38,7 +38,9 @@ GAP_CODES = (
     "few_shoes",  # one pair of shoes → 1
     "low_neutrals",  # under a third of the pieces have a neutral main colour → 1
     "orphan_items",  # pieces that pair with nothing (formality / season) → 1
+    "few_partners",  # a top / bottom / outerwear with only one piece to go with → 1 (one gap per piece)
 )
+FEW_PARTNERS = 1  # "few" = this many partners or fewer (an orphan has none and is reported above)
 
 
 @dataclass(frozen=True)
@@ -180,6 +182,13 @@ def analyze(items: list[ItemDTO], season: str) -> Analysis:
                     and _is_orphan(i, by, all_cores))
     if orphans:
         gaps.append(Gap("orphan_items", severity=1, item_ids=orphans))
+    # The progressive nudge: "add a bottom for this jacket" — pieces with one partner, newest first.
+    for item in active:
+        if item.id in orphans or item.category not in ("top", "bottom", "outerwear"):
+            continue
+        partners, wanted = _partners(item, by, all_cores)
+        if 0 < partners <= FEW_PARTNERS:
+            gaps.append(Gap("few_partners", category=wanted, severity=1, item_ids=(item.id,)))
 
     gaps.sort(key=lambda g: (-g.severity, GAP_CODES.index(g.code), g.occasion or "", g.category or ""))
     return Analysis(season=season, stats=stats, gaps=tuple(gaps[:MAX_GAPS]))
@@ -203,6 +212,16 @@ def _is_orphan(item: ItemDTO, by: dict[str, list[ItemDTO]], all_cores: list[tupl
         return bool(by["top"]) and not any(pair_ok(t, item) for t in by["top"])
     # shoes / outerwear: no core (none of which contains this piece) to go with
     return bool(all_cores) and not any(shoes_ok(item, c) for c in all_cores)
+
+
+def _partners(item: ItemDTO, by: dict[str, list[ItemDTO]], all_cores: list[tuple[ItemDTO, ...]]) -> tuple[int, str]:
+    """How many pieces this one can be worn with, and which category would add more."""
+    if item.category == "top":
+        return sum(1 for b in by["bottom"] if pair_ok(item, b)), "bottom"
+    if item.category == "bottom":
+        return sum(1 for t in by["top"] if pair_ok(t, item)), "top"
+    fitting = sum(1 for c in all_cores if shoes_ok(item, c))  # outerwear over a core
+    return fitting, "bottom" if len(by["bottom"]) <= len(by["top"]) else "top"
 
 
 def _count_outfits(all_cores: list[tuple[ItemDTO, ...]], shoes: list[ItemDTO]) -> int:

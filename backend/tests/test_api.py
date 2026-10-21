@@ -3,6 +3,7 @@ import io
 from PIL import Image
 
 from app.ai.providers import FAKE
+from app.db import SessionLocal
 from tests.helpers import answer, wardrobe
 
 
@@ -79,6 +80,7 @@ def test_analyze_then_create_item(client, auth, fake_ai):
             "is_clothing": True, "category": "DRESS", "subcategory": "midi dress", "name": "Bordo elbise",
             "colors": ["burgundy", "neon-unicorn", "black"], "pattern": "solid",
             "warmth": 9, "formality": 4, "seasons": ["autumn", "monsoon"],
+            "confidence": 0.62, "uncertain": ["warmth", "seasons"],
         }
 
     fake_ai.respond = fake_chat
@@ -91,15 +93,23 @@ def test_analyze_then_create_item(client, auth, fake_ai):
     assert body["tags"]["colors"] == ["burgundy", "black"]
     assert body["tags"]["warmth"] == 5
     assert body["tags"]["seasons"] == ["autumn"]
+    assert body["confidence"] == 0.62 and body["uncertain"] == ["warmth", "seasons"]  # the app highlights these
 
     # stored image is a downscaled WEBP
     img = client.get(body["image_url"].replace("http://testserver", ""), headers=auth)
     stored = Image.open(io.BytesIO(img.content))
     assert stored.format == "WEBP" and max(stored.size) <= 1024
 
-    create = client.post("/items", json={"image_key": body["image_key"], **body["tags"]}, headers=auth)
+    create = client.post("/items", json={"image_key": body["image_key"], "ai_confidence": body["confidence"], **body["tags"]},
+                         headers=auth)
     assert create.status_code == 201
     item_id = create.json()["id"]
+    with SessionLocal() as db:
+        import uuid
+
+        from app.models import Item
+
+        assert db.get(Item, uuid.UUID(item_id)).ai_confidence == 0.62
 
     upd = client.patch(f"/items/{item_id}", json={"name": "Sevdiğim elbise", "colors": ["red"]}, headers=auth)
     assert upd.json()["name"] == "Sevdiğim elbise" and upd.json()["colors"] == ["red"]

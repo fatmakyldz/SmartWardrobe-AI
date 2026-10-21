@@ -111,7 +111,8 @@ export type GapCode =
   | 'season_uncovered'
   | 'few_shoes'
   | 'low_neutrals'
-  | 'orphan_items';
+  | 'orphan_items'
+  | 'few_partners';
 export type Gap = {
   code: GapCode;
   category: Category | null;
@@ -298,12 +299,20 @@ export const api = {
       } as unknown as Blob);
     }
     form.append('lang', lang);
-    return request<{ image_key: string; image_url: string; is_clothing: boolean; tags: Tags; ai_skipped: string | null }>('/items/analyze', {
+    return request<{
+      image_key: string;
+      image_url: string;
+      is_clothing: boolean;
+      tags: Tags;
+      ai_skipped: string | null;
+      confidence: number | null;
+      uncertain: (keyof Tags)[];
+    }>('/items/analyze', {
       method: 'POST',
       body: form,
     });
   },
-  createItem: (b: Tags & { image_key: string }) => request<Item>('/items', json('POST', b)),
+  createItem: (b: Tags & { image_key: string; ai_confidence?: number | null }) => request<Item>('/items', json('POST', b)),
   updateItem: (id: string, b: Partial<Tags>) => request<Item>(`/items/${id}`, json('PATCH', b)),
   deleteItem: (id: string) => request<void>(`/items/${id}`, { method: 'DELETE' }),
 
