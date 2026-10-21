@@ -92,19 +92,26 @@ export function OutfitBoard({
         <T variant="heading" accessibilityRole="header">
           {outfit.title}
         </T>
+        {outfit.source === 'ai_edited' ? (
+          <T variant="tiny" color="muted">
+            {t.today.edited}
+          </T>
+        ) : null}
         <T variant="body" color="inkSoft" style={{ marginTop: space.xs }}>
           {outfit.reason}
         </T>
         {onWorn || onEdit ? (
           <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.lg }}>
             {onWorn ? (
-              <Button
-                label={wornToday(outfit) ? t.today.wornDone : t.today.worn}
-                kind={wornToday(outfit) ? 'primary' : 'secondary'}
-                onPress={onWorn}
-                disabled={wornToday(outfit)}
-                style={{ flex: 1 }}
-              />
+              wornToday(outfit) ? (
+                <View style={{ flex: 1, justifyContent: 'center' }}>
+                  <T variant="small" color="muted">
+                    {'\u2713'} {t.today.wornDone}
+                  </T>
+                </View>
+              ) : (
+                <Button label={t.today.worn} kind="secondary" onPress={onWorn} style={{ flex: 1 }} />
+              )
             ) : null}
             {onEdit ? <Button label={t.today.edit} kind="ghost" onPress={onEdit} style={{ flex: 1 }} /> : null}
           </View>
@@ -131,6 +138,9 @@ export function OutfitBoard({
   );
 }
 
+/** Device-local day. The backend counts one wear per day in the user's timezone (services/outfits.py);
+ *  around midnight with a mismatch this can disagree by one tap, in which case the server just returns
+ *  the same worn_at. The app's User type has no timezone yet (AI-08). */
 export function wornToday(outfit: Outfit): boolean {
   if (!outfit.worn_at) return false;
   const d = new Date(outfit.worn_at);

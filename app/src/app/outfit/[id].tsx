@@ -8,9 +8,8 @@ import { Button, Chip, Field, Notice, Screen, T, tap } from '@/components/ui';
 import { Category, CATEGORIES, imageSource, Item, Occasion, OCCASIONS, Outfit } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n';
-import { keys, useItems, useOutfits, useSaveOutfit } from '@/lib/queries';
+import { useItems, useLatestOutfits, useOutfits, useSaveOutfit } from '@/lib/queries';
 import { radius, space, usePalette } from '@/lib/theme';
-import { useQueryClient } from '@tanstack/react-query';
 
 /** The rule the backend enforces (outfit_rules.py): top + bottom or a dress; one per category, accessories aside. */
 function complete(items: Item[]): boolean {
@@ -27,18 +26,19 @@ export default function OutfitEditor() {
   const p = usePalette();
   const { t, lang } = useI18n();
   const errorText = useErrorText();
-  const qc = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = id === 'new';
   const { width } = useWindowDimensions();
 
   const items = useItems();
+  const latest = useLatestOutfits().data;
   const history = useOutfits(false, !isNew);
-  const existing: Outfit | undefined = useMemo(() => {
-    if (isNew) return undefined;
-    const latest = qc.getQueryData<Outfit[]>(keys.latestOutfits) ?? [];
-    return [...latest, ...(history.data ?? []), ...(qc.getQueryData<Outfit[]>(keys.outfits(true)) ?? [])].find((o) => o.id === id);
-  }, [isNew, id, history.data, qc]);
+  const liked = useOutfits(true, !isNew);
+  const existing: Outfit | undefined = useMemo(
+    () => (isNew ? undefined : [...latest, ...(history.data ?? []), ...(liked.data ?? [])].find((o) => o.id === id)),
+    [isNew, id, latest, history.data, liked.data],
+  );
+  const missing = !isNew && history.isSuccess && liked.isSuccess && !existing;
 
   const [selected, setSelected] = useState<string[] | null>(null);
   const chosen = selected ?? existing?.items.map((i) => i.id) ?? [];
@@ -65,10 +65,15 @@ export default function OutfitEditor() {
     });
   }
 
+  function close() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }
+
   async function submit() {
     try {
       await save.mutateAsync({ id: isNew ? null : id, item_ids: chosen, occasion, title: title.trim(), lang });
-      router.back();
+      close();
     } catch {
       // shown below
     }
@@ -83,7 +88,7 @@ export default function OutfitEditor() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t.common.close}
-        onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        onPress={close}
         style={{ alignSelf: 'flex-start', paddingVertical: space.md }}
         hitSlop={12}
       >
@@ -93,6 +98,11 @@ export default function OutfitEditor() {
       <T variant="title" accessibilityRole="header" style={{ marginTop: space.lg }}>
         {isNew ? t.outfitEdit.newTitle : t.outfitEdit.title}
       </T>
+      {missing ? (
+        <View style={{ marginTop: space.xl }}>
+          <Notice tone="error">{t.errors.not_found}</Notice>
+        </View>
+      ) : null}
       <T variant="body" color="inkSoft" style={{ marginTop: space.sm }}>
         {t.outfitEdit.intro}
       </T>
@@ -111,13 +121,13 @@ export default function OutfitEditor() {
         </View>
       ) : null}
 
-      {items.isLoading || (!isNew && !existing && history.isLoading) ? (
+      {items.isLoading || (!isNew && !existing && (history.isLoading || liked.isLoading)) ? (
         <ActivityIndicator color={p.ink} style={{ alignSelf: 'flex-start', marginTop: space.xl }} />
       ) : null}
       {items.isError ? <Notice tone="error">{errorText(items.error)}</Notice> : null}
 
       <View style={{ gap: space.xl, marginTop: space.xl }}>
-        {grouped.map(({ c, list }) => (
+        {(missing ? [] : grouped).map(({ c, list }) => (
           <View key={c} style={{ gap: space.sm }}>
             <T variant="heading">{t.categories[c as Category]}</T>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
@@ -156,7 +166,7 @@ export default function OutfitEditor() {
           {!ok && chosen.length ? ` · ${t.outfitEdit.incomplete}` : ''}
         </T>
         {save.isError ? <Notice tone="error">{errorText(save.error)}</Notice> : null}
-        <Button label={t.outfitEdit.save} onPress={submit} loading={save.isPending} disabled={!ok} />
+        <Button label={t.outfitEdit.save} onPress={submit} loading={save.isPending} disabled={!ok || missing} />
       </View>
     </Screen>
   );

@@ -75,8 +75,7 @@ export function useWorn() {
     onSuccess: (updated) => {
       qc.setQueryData<Outfit[]>(keys.latestOutfits, (list) => list && patchOutfit(list, updated));
       invalidateOutfitLists(qc);
-      void qc.invalidateQueries({ queryKey: keys.items }); void qc.invalidateQueries({ queryKey: keys.analysis });
-      void qc.invalidateQueries({ queryKey: keys.analysis });
+      void qc.invalidateQueries({ queryKey: keys.items });
     },
   });
 }

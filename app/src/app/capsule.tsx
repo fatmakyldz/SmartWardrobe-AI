@@ -24,7 +24,20 @@ export default function CapsuleScreen() {
   const [occasions, setOccasions] = useState<Occasion[]>(['casual', 'work']);
   const [size, setSize] = useState(12);
 
-  const build = useMutation({ mutationFn: () => api.capsule({ occasions, size, lang, explain: true }) });
+  // The explanation is the only AI spend: with today's budget gone, fall back to the deterministic
+  // capsule (pieces, outfits, gaps) and say why there is no summary.
+  const build = useMutation({
+    mutationFn: async () => {
+      try {
+        return { ...(await api.capsule({ occasions, size, lang, explain: true })), budget: false };
+      } catch (e) {
+        if (e instanceof ApiError && e.code === 'budget_exceeded') {
+          return { ...(await api.capsule({ occasions, size, lang, explain: false })), budget: true };
+        }
+        throw e;
+      }
+    },
+  });
   const c = build.data;
   const notAllowed = build.error instanceof ApiError && build.error.code === 'feature_not_allowed';
 
@@ -69,7 +82,7 @@ export default function CapsuleScreen() {
           <T variant="heading">{t.capsule.size}</T>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
             {[8, 12, 16, 20].map((n) => (
-              <Chip key={n} label={String(n)} selected={size === n} onPress={() => setSize(n)} />
+              <Chip key={n} label={t.outfitEdit.selected(n)} selected={size === n} onPress={() => setSize(n)} />
             ))}
           </View>
         </View>
@@ -91,6 +104,7 @@ export default function CapsuleScreen() {
       {c ? (
         <View style={{ gap: space.xl, marginTop: space.xxl }}>
           <T variant="heading">{t.capsule.result(c.items.length, c.outfits_possible)}</T>
+          {c.budget ? <Notice>{t.errors.budget_exceeded}</Notice> : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, rowGap: space.md }}>
             {c.items.map((item) => (
               <ItemTile key={item.id} item={item} size={tile} onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id } })} />
@@ -135,11 +149,11 @@ export default function CapsuleScreen() {
           {c.gaps.filter((g) => g.category && g.code !== 'orphan_items').length ? (
             <View style={{ gap: space.sm }}>
               <T variant="heading">{t.capsule.missing}</T>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
-                {[...new Set(c.gaps.filter((g) => g.category && g.code !== 'orphan_items').map((g) => g.category!))].map((cat) => (
-                  <Chip key={cat} label={t.categories[cat]} />
-                ))}
-              </View>
+              <T variant="body" color="inkSoft">
+                {[...new Set(c.gaps.filter((g) => g.category && g.code !== 'orphan_items').map((g) => g.category!))]
+                  .map((cat) => t.categories[cat])
+                  .join(' \u00b7 ')}
+              </T>
             </View>
           ) : null}
         </View>

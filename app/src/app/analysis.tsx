@@ -6,6 +6,7 @@ import { Button, Notice, Screen, T } from '@/components/ui';
 import { ItemTile } from '@/components/wardrobe';
 import { Gap } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAnalysis, useItems } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
@@ -13,7 +14,8 @@ import { space, usePalette } from '@/lib/theme';
 /** What the wardrobe is missing (AI-06 `GET /items/analysis`): deterministic, no AI request, every plan. */
 export default function Analysis() {
   const p = usePalette();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const { user } = useAuth();
   const errorText = useErrorText();
   const analysis = useAnalysis();
   const items = useItems();
@@ -21,9 +23,9 @@ export default function Analysis() {
   const a = analysis.data;
 
   function describe(g: Gap): string {
-    const category = g.category ? t.categories[g.category].toLowerCase() : '';
-    const occasion = g.occasion ? t.occasions[g.occasion].toLowerCase() : '';
-    const season = g.season ? t.seasons[g.season as keyof typeof t.seasons] : '';
+    const category = g.category ? t.categories[g.category].toLocaleLowerCase(lang) : '';
+    const occasion = g.occasion ? t.occasions[g.occasion].toLocaleLowerCase(lang) : '';
+    const season = g.season ? (t.seasons[g.season as keyof typeof t.seasons] ?? g.season) : '';
     return t.analysis.gap(g.code, category, occasion, season);
   }
 
@@ -93,7 +95,7 @@ export default function Analysis() {
             ))
           )}
 
-          {a.items ? (
+          {a.items && !user?.is_demo ? (
             <Button label={t.analysis.capsuleLink} kind="secondary" onPress={() => router.push('/capsule')} />
           ) : null}
         </View>

@@ -136,10 +136,13 @@ export default function Today() {
             ))}
           </View>
           <Field
-            label={parse ? t.today.request : t.today.note}
+            label={parse && note.trim() ? t.today.request : t.today.note}
             placeholder={parse ? t.today.requestPlaceholder : t.today.notePlaceholder}
             value={note}
-            onChangeText={setNote}
+            onChangeText={(v) => {
+              setNote(v);
+              if (!v.trim()) setParse(false);
+            }}
             maxLength={200}
           />
           {note.trim() ? (
@@ -162,12 +165,13 @@ export default function Today() {
               tap();
               const text = note.trim();
               setAutoShown(false);
-              suggest.mutate(parse && text ? { occasion, note: '', request: text, lang } : { occasion, note: text, lang });
+              // With parse on the text goes as `request` (parsed) and stays the note, so history keeps it.
+              suggest.mutate(parse && text ? { occasion, note: text, request: text, lang } : { occasion, note: text, lang });
             }}
           />
-          {intent ? (
+          {intent && intentSummary(intent, t, lang) ? (
             <T variant="small" color="muted">
-              {t.today.understood} {intentSummary(intent, t)}
+              {t.today.understood} {intentSummary(intent, t, lang)}
             </T>
           ) : null}
         </View>
@@ -175,6 +179,7 @@ export default function Today() {
 
       <View style={{ gap: space.xxl, marginTop: space.xxl }}>
         {autoShown && outfits.length ? <Notice>{t.today.firstDemo}</Notice> : null}
+        {worn.isError ? <Notice tone="error">{errorText(worn.error)}</Notice> : null}
         {outfits.map((o) => (
           <OutfitBoard
             key={o.id}
@@ -182,7 +187,10 @@ export default function Today() {
             width={boardWidth}
             onRate={(r) => rate(o, r)}
             onOpenItem={(item) => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
-            onWorn={() => worn.mutate(o.id)}
+            onWorn={() => {
+              tap();
+              worn.mutate(o.id);
+            }}
             onEdit={user?.is_demo ? undefined : () => router.push({ pathname: '/outfit/[id]', params: { id: o.id } })}
           />
         ))}
@@ -192,10 +200,10 @@ export default function Today() {
 }
 
 /** "work · no dress · with navy · with a layer" — the parsed request in the user's words. */
-function intentSummary(i: Intent, t: ReturnType<typeof useI18n>['t']): string {
+function intentSummary(i: Intent, t: ReturnType<typeof useI18n>['t'], lang: string): string {
   const parts: string[] = [];
   if (i.occasion) parts.push(t.occasions[i.occasion]);
-  const lc = (x: string) => x.toLowerCase();
+  const lc = (x: string) => x.toLocaleLowerCase(lang); // Turkish dotted İ: 'İş' -> 'iş'
   const inc = [...i.include_categories.map((c) => lc(t.categories[c])), ...i.include_colors.map((c) => lc(t.colors[c as keyof typeof t.colors] ?? c))];
   if (inc.length) parts.push(t.today.with(inc.join(', ')));
   const avoid = [

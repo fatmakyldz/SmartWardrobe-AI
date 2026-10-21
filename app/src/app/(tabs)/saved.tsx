@@ -38,6 +38,7 @@ export default function Saved() {
       <View style={{ marginTop: space.xl, gap: space.xxl }}>
         {outfits.isLoading ? <ActivityIndicator color={p.ink} /> : null}
         {outfits.isError ? <Notice tone="error">{errorText(outfits.error)}</Notice> : null}
+        {worn.isError ? <Notice tone="error">{errorText(worn.error)}</Notice> : null}
         {outfits.isSuccess && outfits.data.length === 0 ? (
           <T variant="body" color="inkSoft">
             {t.saved.empty}
