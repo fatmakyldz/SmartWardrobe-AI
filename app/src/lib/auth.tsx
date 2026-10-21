@@ -4,6 +4,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { api, refreshSession, Session, setRefreshedHandler, setSession, setUnauthorizedHandler, User } from './api';
 import { useI18n } from './i18n';
 import { toLang } from './langs';
+import { setSentryUser } from './observability';
 import { readRefreshToken, writeRefreshToken } from './tokenStore';
 
 type AuthCtx = {
@@ -25,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setUser = useCallback(
     (u: User) => {
       setUserState(u);
+      setSentryUser(u.id);
       setLang(toLang(u.locale)); // the server's list and the app's may drift for a release
     },
     [setLang],
@@ -35,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession({ access: null, refresh: null });
     await writeRefreshToken(null);
     setUserState(null);
+    setSentryUser(null);
     qc.clear();
   }, [qc]);
 

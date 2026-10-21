@@ -8,6 +8,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .ai import AIError
 from .config import get_settings
+from .observability import capture, init_sentry
 from .ratelimit import limiter
 from .routers import auth, items, me, misc, outfits
 
@@ -22,6 +23,8 @@ if not settings.database_url.startswith("sqlite") and (not settings.cors_list or
                        "so any-origin (empty or *) is refused.")
 if not settings.database_url.startswith("sqlite") and settings.ai_debug_log:
     raise RuntimeError("AI_DEBUG_LOG prints full prompts; it is only allowed with a local SQLite database.")
+
+init_sentry(settings)
 
 app = FastAPI(
     title="SmartWardrobe API",
@@ -48,6 +51,8 @@ def rate_limited(request: Request, exc: RateLimitExceeded):
 
 @app.exception_handler(AIError)
 def ai_error(request: Request, exc: AIError):
+    if exc.status >= 500:  # handled here, so the SDK would not see it: a missing prompt, every provider down
+        capture(exc)
     return JSONResponse(status_code=exc.status, content={"detail": {"code": exc.code, **exc.detail}})
 
 

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .db import get_db
 from .models import User
+from .observability import set_sentry_user
 
 _hasher = PasswordHash.recommended()  # Argon2id
 _bearer = HTTPBearer(auto_error=False)
@@ -69,6 +70,7 @@ def current_user(
         raise _unauthorized()
     # Lets the rate limiter key on the user instead of the IP.
     request.state.user_id = str(user.id)
+    set_sentry_user(request.state.user_id)
     return user
 
 
