@@ -112,7 +112,7 @@ Rollback: set `STORAGE_BACKEND=db` again — the `images` table is untouched unt
 | POST | `/outfits/suggest` | `{occasion, note?, request?, lat?, lon?, lang}` → 2-3 outfits from the user's own items; `request` is free text ("warm smart look, no dress"), parsed first by the intent feature (one extra AI request, so it needs two requests left on the day) — its occasion wins and the answer echoes it as `intent` |
 | POST | `/outfits/intent` | `{text, lang}` → `{occasion?, include_categories, include_colors, avoid_categories, avoid_colors, avoid_patterns, wants_outerwear?, brief}`: the same parse on its own, so the app can show what it understood (`intent` feature) |
 | POST | `/outfits/capsule` | `{occasions, size 6-20, lang, explain, lat?}` → a capsule chosen deterministically from the user's own pieces for those occasions and the current season (`items, outfits_possible, sample_outfits, gaps`) plus, with `explain`, the model's `summary` and `tips` (one AI request; `capsule` feature, premium) |
-| GET | `/outfits` | history (`?liked_only=true`) |
+| GET | `/outfits` | history (`?liked_only=true`); every outfit carries `source` (`ai` / `ai_edited` / `user`) and `worn_at` |
 | POST | `/outfits` | a user-built outfit `{item_ids, occasion, title?}`: own items only, one per category (accessories aside), top + bottom or a dress (`user_outfits` feature) |
 | PATCH | `/outfits/{id}/items` | change an outfit's pieces `{item_ids}`; an AI suggestion becomes `ai_edited` (`user_outfits` feature) |
 | POST | `/outfits/{id}/worn` | "wore it today": `worn_at`, each piece's `wear_count` / `last_worn_at`; counted once per day |

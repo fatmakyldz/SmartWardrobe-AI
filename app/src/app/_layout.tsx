@@ -74,6 +74,9 @@ function Root() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="claim" />
           <Stack.Screen name="style" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="outfit/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="analysis" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="capsule" options={{ presentation: 'modal' }} />
           <Stack.Screen name="item/new" options={{ presentation: 'modal' }} />
           <Stack.Screen name="item/[id]" options={{ presentation: 'modal' }} />
         </Stack.Protected>

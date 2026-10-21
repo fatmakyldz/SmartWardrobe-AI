@@ -1,12 +1,14 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api, Item, Occasion, Outfit, Tags } from './api';
+import { api, Intent, Item, Occasion, Outfit, Tags } from './api';
 
 export const keys = {
   items: ['items'] as const,
   outfits: (liked: boolean) => ['outfits', liked] as const,
   // The last set from /outfits/suggest. Client-only: filled by useSuggest, never fetched.
   latestOutfits: ['outfits', 'latest'] as const,
+  latestIntent: ['outfits', 'latest', 'intent'] as const, // what the last free-text request parsed to
+  analysis: ['analysis'] as const,
 };
 
 // Saved lists (['outfits', true|false]) — everything under ['outfits'] except the client-only latest set.
@@ -45,19 +47,63 @@ export function useLatestOutfits() {
 export function useSuggest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (b: { occasion: Occasion; note: string; lang: string }) => api.suggest(b),
+    mutationFn: (b: { occasion: Occasion; note: string; request?: string; lang: string }) => api.suggest(b),
     onSuccess: (res) => {
       qc.setQueryData<Outfit[]>(keys.latestOutfits, res.outfits);
+      qc.setQueryData<Intent | null>(keys.latestIntent, res.intent);
       invalidateOutfitLists(qc);
     },
   });
+}
+
+export function useLatestIntent() {
+  return useQuery<Intent | null>({
+    queryKey: keys.latestIntent,
+    queryFn: () => null,
+    enabled: false,
+    initialData: null,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
+
+/** "Wore it today": the outfit comes back with worn_at; pieces' wear data changes too, so items refetch. */
+export function useWorn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.worn(id),
+    onSuccess: (updated) => {
+      qc.setQueryData<Outfit[]>(keys.latestOutfits, (list) => list && patchOutfit(list, updated));
+      invalidateOutfitLists(qc);
+      void qc.invalidateQueries({ queryKey: keys.items });
+    },
+  });
+}
+
+export function useSaveOutfit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: { id: string | null; item_ids: string[]; occasion: Occasion; title: string; lang: string }) =>
+      b.id ? api.updateOutfitItems(b.id, b.item_ids) : api.createOutfit({ item_ids: b.item_ids, occasion: b.occasion, title: b.title, lang: b.lang }),
+    onSuccess: (updated) => {
+      qc.setQueryData<Outfit[]>(keys.latestOutfits, (list) => list && patchOutfit(list, updated));
+      invalidateOutfitLists(qc);
+    },
+  });
+}
+
+export function useAnalysis(enabled = true) {
+  return useQuery({ queryKey: keys.analysis, queryFn: api.analysis, enabled, staleTime: 5 * 60_000 });
 }
 
 export function useCreateItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: Tags & { image_key: string }) => api.createItem(b),
-    onSuccess: (item) => qc.setQueryData<Item[]>(keys.items, (old) => [item, ...(old ?? [])]),
+    onSuccess: (item) => {
+      qc.setQueryData<Item[]>(keys.items, (old) => [item, ...(old ?? [])]);
+      void qc.invalidateQueries({ queryKey: keys.analysis });
+    },
   });
 }
 
@@ -65,7 +111,10 @@ export function useUpdateItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...b }: Partial<Tags> & { id: string }) => api.updateItem(id, b),
-    onSuccess: (item) => qc.setQueryData<Item[]>(keys.items, (old) => old?.map((i) => (i.id === item.id ? item : i))),
+    onSuccess: (item) => {
+      qc.setQueryData<Item[]>(keys.items, (old) => old?.map((i) => (i.id === item.id ? item : i)));
+      void qc.invalidateQueries({ queryKey: keys.analysis });
+    },
   });
 }
 
@@ -76,6 +125,7 @@ export function useDeleteItem() {
     onSuccess: (_, id) => {
       qc.setQueryData<Item[]>(keys.items, (old) => old?.filter((i) => i.id !== id));
       qc.invalidateQueries({ queryKey: ['outfits'] });
+      void qc.invalidateQueries({ queryKey: keys.analysis });
     },
   });
 }
