@@ -22,6 +22,9 @@ os.environ["AI_ROUTES"] = json.dumps({
     "routes": {
         "tagging": {"standard": ["vision-a", "vision-b"], "premium": ["vision-a", "vision-b"]},
         "suggest": {"standard": ["text-a", "text-b"], "premium": ["text-a", "text-b"]},
+        "intent": {"standard": ["vision-a", "text-b"], "premium": ["vision-a", "text-b"]},
+        # like production: premium explanations go to the mid (text-a) model, standard to the small one
+        "capsule_explain": {"standard": ["vision-a", "text-b"], "premium": ["text-a", "text-b"]},
     },
     "attempts_per_candidate": 2,
 })

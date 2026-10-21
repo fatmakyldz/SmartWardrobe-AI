@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 Lang = Literal["en", "tr"]
 Category = Literal["top", "bottom", "dress", "outerwear", "shoes", "accessory", "bag"]
@@ -139,9 +139,38 @@ class CityOut(BaseModel):
 class SuggestIn(BaseModel):
     occasion: Occasion = "casual"
     note: str = Field(default="", max_length=200)
+    # Free text ("something warm for a client lunch, no dress"): parsed by the intent feature first (one
+    # extra AI request); its occasion wins over `occasion` when it names one.
+    request: str | None = Field(default=None, max_length=200)
     lat: float | None = Field(default=None, ge=-90, le=90)
     lon: float | None = Field(default=None, ge=-180, le=180)
     lang: Lang = "en"
+
+
+class IntentIn(BaseModel):
+    text: str = Field(min_length=1, max_length=200)
+    lang: Lang = "en"
+
+    @field_validator("text")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not v:
+            raise ValueError("text is blank")
+        return v
+
+
+class IntentOut(BaseModel):
+    """A natural-language request as vocabulary values (AI-06)."""
+
+    occasion: Occasion | None
+    include_categories: list[Category]
+    include_colors: list[str]
+    avoid_categories: list[Category]
+    avoid_colors: list[str]
+    avoid_patterns: list[str]
+    wants_outerwear: bool | None
+    brief: str
 
 
 class OutfitOut(BaseModel):
@@ -159,6 +188,46 @@ class OutfitOut(BaseModel):
 class SuggestOut(BaseModel):
     weather: WeatherOut | None
     outfits: list[OutfitOut]
+    intent: IntentOut | None = None  # set when the request was given as free text
+
+
+class GapOut(BaseModel):
+    """Something the wardrobe is missing; the app translates `code` (see ai/analysis.py GAP_CODES)."""
+
+    code: str
+    category: Category | None = None
+    occasion: Occasion | None = None
+    season: str | None = None
+    severity: int
+    item_ids: list[uuid.UUID] = []
+
+
+class WardrobeAnalysisOut(BaseModel):
+    season: str
+    items: int
+    per_category: dict[str, int]
+    outfits_possible: int
+    neutral_share: float
+    gaps: list[GapOut]
+
+
+class CapsuleIn(BaseModel):
+    occasions: list[Occasion] = Field(default=["casual", "work"], min_length=1, max_length=7)
+    size: int = Field(default=12, ge=6, le=20)
+    lang: Lang = "en"
+    explain: bool = True  # False: the deterministic capsule only, no AI request spent
+    lat: float | None = Field(default=None, ge=-90, le=90)  # for the season (hemisphere)
+
+
+class CapsuleOut(BaseModel):
+    occasions: list[Occasion]
+    season: str
+    items: list[ItemOut]
+    outfits_possible: int
+    sample_outfits: list[list[uuid.UUID]]
+    gaps: list[GapOut]
+    summary: str | None = None
+    tips: list[str] = []
 
 
 class FeedbackIn(BaseModel):

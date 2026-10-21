@@ -58,6 +58,18 @@ def _weather(lat: float | None, lon: float | None) -> dict | None:
         return None  # still suggest something without weather
 
 
+@dataclass(frozen=True)
+class WardrobeInputs:
+    items: list[ItemDTO]
+    southern_hemisphere: bool
+
+
+def wardrobe_inputs(user: User, lat: float | None = None) -> WardrobeInputs:
+    """The wardrobe as DTOs for the deterministic analysis (ai.analysis): no weather, no history."""
+    lat = lat if lat is not None else user.lat
+    return WardrobeInputs(items=[item_dto(i) for i in user.items], southern_hemisphere=lat is not None and lat < 0)
+
+
 def suggest_inputs(db: Session, user: User, lat: float | None, lon: float | None, now: datetime) -> SuggestInputs:
     lat = lat if lat is not None else user.lat
     lon = lon if lon is not None else user.lon
