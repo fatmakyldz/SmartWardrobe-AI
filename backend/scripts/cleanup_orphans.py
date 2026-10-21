@@ -50,7 +50,7 @@ def main() -> None:
         n = anonymize_old_requests(db, dry_run=args.dry_run)
         if not args.dry_run:
             db.commit()
-        print(f"ai_requests older than 90 days {'to anonymise' if args.dry_run else 'anonymised'}: {n}")
+        _show(f"ai_requests older than 90 days ({'to anonymise' if args.dry_run else 'anonymised'})", [str(n)] if n else [])
         if get_settings().storage_backend != "s3":
             print("reconciliation skipped: STORAGE_BACKEND is not s3")
             return

@@ -29,7 +29,24 @@ def test_export_returns_the_accounts_data_as_json(client, auth, fake_ai):
     assert all(i["photo_url"] for i in body["items"])
     assert len(body["outfits"]) >= 1 and set(body["outfits"][0]["item_ids"]) <= {i["id"] for i in body["items"]}
     assert body["feedback"] and body["feedback"][-1]["kind"] == "like"
-    assert "ai_requests" not in body  # pseudonymous telemetry is not the person's data
+    # Usage records still linked to the account are personal data too; prompts never are.
+    assert body["usage"]["daily_counters"] and body["usage"]["daily_counters"][0]["feature"] == "suggest"
+    assert body["usage"]["ai_requests"][0]["feature"] == "suggest" and "prompt" not in str(body["usage"]).lower()
+    assert body["sessions"] and set(body["sessions"][0]) == {"device", "signed_in_at", "last_used_at", "expires_at"}
+
+
+def test_export_is_limited_to_five_an_hour_and_sees_only_your_data(client, auth, fake_ai):
+    other = client.post("/auth/register", json={"email": "other@example.com", "password": "supersecret1", "name": "O", "locale": "en"})
+    assert other.status_code == 201
+    with SessionLocal() as db:
+        u = db.query(User).filter_by(email="other@example.com").one()
+        db.add(Item(user_id=u.id, image_key=f"u/{u.id.hex}/x.webp", category="dress"))
+        db.commit()
+    for _ in range(5):
+        body = client.get("/me/export", headers=auth).json()
+        assert body["account"]["email"] == "fatma@example.com" and body["items"] == []
+    r = client.get("/me/export", headers=auth)
+    assert r.status_code == 429 and r.json()["detail"]["code"] == "rate_limited"
 
 
 def test_export_requires_auth(client):

@@ -1,0 +1,47 @@
+# Weekly clean-up against production (§9 retention): orphan photos, stale unverified accounts,
+# ai_requests anonymisation, bucket reconciliation. The Space has no cron, so it runs here.
+# Secrets: DATABASE_URL (Neon), S3_ENDPOINT_URL, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY,
+# SECRET_KEY (any long value; the app refuses to start without one). Run by hand with "Run workflow"
+# (dry-run by default there).
+name: cleanup
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"  # Mondays 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply (otherwise dry-run)"
+        type: boolean
+        default: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    if: github.repository == 'fatmakyldz/SmartWardrobe-AI'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: cleanup_orphans
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          CORS_ORIGINS: https://wardrobe.fomertech.com
+          STORAGE_BACKEND: s3
+          S3_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT_URL }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.apply }}" = "true" ]; then
+            python scripts/cleanup_orphans.py
+          else
+            python scripts/cleanup_orphans.py --dry-run
+          fi

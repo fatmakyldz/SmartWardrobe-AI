@@ -1,7 +1,9 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Platform, Share, View } from 'react-native';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { Alert, Platform, View } from 'react-native';
 
 import { CityPicker } from '@/components/CityPicker';
 import { Button, Chip, Notice, Screen, T } from '@/components/ui';
@@ -12,6 +14,8 @@ import { Lang, useI18n } from '@/lib/i18n';
 import { useEntitlements } from '@/lib/queries';
 import { LANG_LABELS, SUPPORTED_LANGS } from '@/lib/langs';
 import { space, usePalette } from '@/lib/theme';
+
+const EXPORT_FILE = 'smartwardrobe-export.json';
 
 function confirm(message: string, okLabel: string, cancelLabel: string): Promise<boolean> {
   if (Platform.OS === 'web') return Promise.resolve(globalThis.confirm?.(message) ?? false);
@@ -55,11 +59,16 @@ export default function Profile() {
         const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'smartwardrobe-export.json';
+        a.download = EXPORT_FILE;
+        document.body.appendChild(a);
         a.click();
+        a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 10_000);
       } else {
-        await Share.share({ message: text, title: 'smartwardrobe-export.json' });
+        // A real file in the cache (the share sheet's text path truncates and Android caps it ~1 MB).
+        const file = new File(Paths.cache, EXPORT_FILE);
+        await file.write(text);
+        await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json', dialogTitle: EXPORT_FILE });
       }
     } catch (e) {
       setError(errorText(e));

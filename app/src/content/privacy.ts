@@ -17,18 +17,19 @@ const en: Policy = {
     {
       heading: 'What we keep',
       paragraphs: [
-        'Account: your e-mail address, your name, a hashed password (never the password itself), your language, your time zone and, if you set one, your city for the weather.',
-        'Wardrobe: the photos you add, the tags describing each piece (category, colours, pattern, warmth, formality, seasons, brand and material if you fill them in), and when you wore them.',
+        'Account: your e-mail address, your name, a hashed password (never the password itself), your language, your time zone and, if you set one, your city and its coordinates for the weather. If you tap “use my location”, the device asks your permission and we read the coordinates once; we do not track where you go.',
+        'Plan: which plan you are on, and the sign-in sessions on your devices (a device label and dates), so you can sign out everywhere.',
+        'Wardrobe: the photos you add, the tags describing each piece (category, colours, pattern, warmth, formality, seasons, brand and material if you fill them in), the tags the AI first suggested before you edited them, and when you wore them.',
         'Outfits and feedback: the outfits suggested to you or built by you, which ones you liked, disliked or wore, and the occasion, note and weather they were made for.',
         'Style answers: what you told us in the short style questionnaire, and a short written summary of your taste that we build from your wardrobe and feedback.',
-        'Usage: how many AI requests you made each day (to apply the daily limits of your plan) and, for a limited time, which request belonged to which account.',
+        'Usage: how many AI requests you made each day (to apply the daily limits of your plan) and, for a limited time, which request belonged to which account. Our servers also see your IP address briefly, to limit abuse; it is not kept with your account.',
       ],
     },
     {
       heading: 'How the AI part works',
       paragraphs: [
-        'When you add a photo, we send a reduced copy of it to an AI model to describe the piece. When you ask for an outfit, we send the descriptions of your pieces (not the photos), the occasion, the weather and your style answers, and the model returns outfit ideas. Any note you type is checked for e-mail addresses and phone numbers, which are masked before the text leaves our servers.',
-        'These models are run by third-party providers (currently Anthropic and Groq) under their API terms. We do not use your data to train models, and we do not sell it.',
+        'When you add a photo, we send a reduced copy of it to an AI model to describe the piece. When you ask for an outfit, we send the descriptions of your pieces (not the photos), the occasion, the weather and your style answers, and the model returns outfit ideas. Any note or free-text request you type is checked for e-mail addresses and phone numbers, which are masked before the text leaves our servers.',
+        'These models are run by third-party providers (currently Anthropic and Groq), which process the request only to answer it. We do not use your data to train models, and we do not sell it.',
         'The AI never changes your data directly: everything it returns is checked by our servers before it is saved.',
       ],
     },
@@ -36,6 +37,7 @@ const en: Policy = {
       heading: 'Where it lives',
       paragraphs: [
         'Your data is stored on cloud infrastructure we rent (a managed database and a private object store for photos). Photos are private: the app receives short-lived links that expire within minutes.',
+        'To show the weather we send your city’s coordinates (nothing about your account) to a weather service, Open-Meteo; searching for a city sends the text you type to the same service.',
         'We use a transactional e-mail service only to send you the confirmation and password-reset links you ask for.',
       ],
     },
@@ -43,8 +45,8 @@ const en: Policy = {
       heading: 'How long we keep it',
       paragraphs: [
         'As long as your account exists. When you delete your account, your account, wardrobe, photos, outfits and feedback are deleted. Records of AI usage lose their link to your account at that moment and remain only as anonymous statistics.',
-        'Even without deletion, the link between an AI usage record and an account is removed after 90 days.',
-        'An account whose e-mail is never confirmed and that is not used for 14 days is deleted automatically. A sample ("demo") wardrobe is deleted 24 hours after it was opened.',
+        'Even without deletion, the link between an AI usage record and an account is removed once the record is 90 days old, in our weekly clean-up.',
+        'An account whose e-mail is never confirmed and that is not used for 14 days is deleted in the same weekly clean-up. A sample ("demo") wardrobe is deleted 24 hours after it was opened.',
       ],
     },
     {
@@ -77,18 +79,19 @@ const tr: Policy = {
     {
       heading: 'Neleri tutuyoruz',
       paragraphs: [
-        'Hesap: e-posta adresin, adın, şifrenin özetlenmiş hâli (şifrenin kendisi asla), dilin, saat dilimin ve ayarladıysan hava durumu için şehrin.',
-        'Gardırop: eklediğin fotoğraflar, her parçayı tanımlayan etiketler (kategori, renkler, desen, sıcaklık, resmiyet, mevsimler; doldurursan marka ve kumaş) ve ne zaman giydiğin.',
+        'Hesap: e-posta adresin, adın, şifrenin özetlenmiş hâli (şifrenin kendisi asla), dilin, saat dilimin ve ayarladıysan hava durumu için şehrin ve koordinatları. “Konumumu kullan”a dokunursan cihaz senden izin ister ve koordinatları bir kez okuruz; nereye gittiğini takip etmeyiz.',
+        'Plan: hangi planda olduğun ve cihazlarındaki oturumlar (bir cihaz etiketi ve tarihler); böylece her yerden çıkış yapabilirsin.',
+        'Gardırop: eklediğin fotoğraflar, her parçayı tanımlayan etiketler (kategori, renkler, desen, sıcaklık, resmiyet, mevsimler; doldurursan marka ve kumaş), sen düzenlemeden önce yapay zekânın önerdiği ilk etiketler ve ne zaman giydiğin.',
         'Kombinler ve geri bildirim: sana önerilen ya da senin kurduğun kombinler, hangilerini beğendiğin, beğenmediğin ya da giydiğin; hangi durum, not ve hava için hazırlandıkları.',
         'Stil cevapları: kısa stil anketinde söylediklerin ve gardırobunla geri bildiriminden oluşturduğumuz kısa bir zevk özeti.',
-        'Kullanım: planının günlük sınırlarını uygulamak için her gün kaç yapay zekâ isteği yaptığın ve sınırlı bir süre için hangi isteğin hangi hesaba ait olduğu.',
+        'Kullanım: planının günlük sınırlarını uygulamak için her gün kaç yapay zekâ isteği yaptığın ve sınırlı bir süre için hangi isteğin hangi hesaba ait olduğu. Sunucularımız kötüye kullanımı sınırlamak için IP adresini de kısa süreliğine görür; hesabınla birlikte saklanmaz.',
       ],
     },
     {
       heading: 'Yapay zekâ kısmı nasıl çalışır',
       paragraphs: [
-        'Bir fotoğraf eklediğinde, parçayı tanımlaması için küçültülmüş bir kopyasını bir yapay zekâ modeline gönderiyoruz. Kombin istediğinde parçalarının tanımlarını (fotoğrafları değil), durumu, havayı ve stil cevaplarını gönderiyoruz; model kombin fikirleri döndürüyor. Yazdığın notlarda e-posta adresi ve telefon numarası aranır; bunlar metin sunucularımızdan çıkmadan maskelenir.',
-        'Bu modeller üçüncü taraf sağlayıcılar (şu an Anthropic ve Groq) tarafından, kendi API koşulları altında çalıştırılır. Verini model eğitmek için kullanmıyor, satmıyoruz.',
+        'Bir fotoğraf eklediğinde, parçayı tanımlaması için küçültülmüş bir kopyasını bir yapay zekâ modeline gönderiyoruz. Kombin istediğinde parçalarının tanımlarını (fotoğrafları değil), durumu, havayı ve stil cevaplarını gönderiyoruz; model kombin fikirleri döndürüyor. Yazdığın not ve serbest metin isteklerinde e-posta adresi ve telefon numarası aranır; bunlar metin sunucularımızdan çıkmadan maskelenir.',
+        'Bu modeller üçüncü taraf sağlayıcılar (şu an Anthropic ve Groq) tarafından çalıştırılır; isteği yalnızca cevaplamak için işlerler. Verini model eğitmek için kullanmıyor, satmıyoruz.',
         'Yapay zekâ verini doğrudan değiştirmez: döndürdüğü her şey kaydedilmeden önce sunucularımızda kontrol edilir.',
       ],
     },
@@ -96,6 +99,7 @@ const tr: Policy = {
       heading: 'Nerede duruyor',
       paragraphs: [
         'Verin kiraladığımız bulut altyapısında saklanır (yönetilen bir veritabanı ve fotoğraflar için özel bir nesne deposu). Fotoğraflar gizlidir: uygulama, dakikalar içinde geçerliliğini yitiren kısa ömürlü bağlantılar alır.',
+        'Hava durumunu göstermek için şehrinin koordinatlarını (hesabınla ilgili hiçbir şey olmadan) bir hava durumu servisine, Open-Meteo’ya gönderiyoruz; şehir aramak da yazdığın metni aynı servise gönderir.',
         'Bir e-posta servisini yalnızca istediğin doğrulama ve şifre sıfırlama bağlantılarını göndermek için kullanıyoruz.',
       ],
     },
@@ -103,8 +107,8 @@ const tr: Policy = {
       heading: 'Ne kadar süre tutuyoruz',
       paragraphs: [
         'Hesabın var olduğu sürece. Hesabını sildiğinde hesabın, gardırobun, fotoğrafların, kombinlerin ve geri bildirimin silinir. Yapay zekâ kullanım kayıtlarının hesabınla bağı o anda kopar; yalnızca anonim istatistik olarak kalırlar.',
-        'Silmesen de, bir yapay zekâ kullanım kaydıyla hesap arasındaki bağ 90 gün sonra kaldırılır.',
-        'E-postası hiç doğrulanmayan ve 14 gün kullanılmayan hesaplar otomatik silinir. Örnek ("demo") gardırop açıldıktan 24 saat sonra silinir.',
+        'Silmesen de, bir yapay zekâ kullanım kaydıyla hesap arasındaki bağ, kayıt 90 günü geçince haftalık temizlikte kaldırılır.',
+        'E-postası hiç doğrulanmayan ve 14 gün kullanılmayan hesaplar aynı haftalık temizlikte silinir. Örnek ("demo") gardırop açıldıktan 24 saat sonra silinir.',
       ],
     },
     {

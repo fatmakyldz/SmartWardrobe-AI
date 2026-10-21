@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from ..models import FeedbackEvent, Item, Outfit, RefreshToken, User
+from ..models import AIRequest, FeedbackEvent, Item, Outfit, RefreshToken, UsageCounter, User
 from ..storage import get_storage
 from ..security import hash_password
 from ..vocab import normalize_lang
@@ -68,13 +68,21 @@ def _iso(value: datetime | None) -> str | None:
 
 def export_account(db: Session, user: User, now: datetime | None = None) -> dict:
     """Everything the account holds, as plain JSON (data portability, §9): profile, style answers, pieces
-    (tags + a short-lived photo link), outfits with their pieces, feedback events. No AI telemetry: those
-    rows are pseudonymous usage records, not the person's data. Read-only."""
+    (tags + a short-lived photo link), outfits with their pieces, feedback events, sign-in sessions, and the
+    usage records still linked to the account (daily counters; AI requests younger than the 90-day
+    anonymisation — feature, status, tokens, time; never prompts). Read-only."""
     now = now or datetime.now(timezone.utc)
     storage = get_storage()
-    items = sorted(user.items, key=lambda i: i.created_at)
-    outfits = sorted(user.outfits, key=lambda o: o.created_at)
+    items = db.scalars(select(Item).where(Item.user_id == user.id).order_by(Item.created_at)).all()
+    outfits = db.scalars(
+        select(Outfit).where(Outfit.user_id == user.id).options(selectinload(Outfit.outfit_items)).order_by(Outfit.created_at)
+    ).all()
     feedback = db.scalars(select(FeedbackEvent).where(FeedbackEvent.user_id == user.id).order_by(FeedbackEvent.created_at)).all()
+    sessions = db.scalars(select(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None),
+                                                     RefreshToken.expires_at > now).order_by(RefreshToken.created_at)).all()
+    counters = db.scalars(select(UsageCounter).where(UsageCounter.user_id == user.id)
+                          .order_by(UsageCounter.period_start, UsageCounter.feature)).all()
+    requests = db.scalars(select(AIRequest).where(AIRequest.subject_id == user.id).order_by(AIRequest.created_at)).all()
     return {
         "format": "smartwardrobe-export/1",
         "exported_at": now.isoformat(),
@@ -91,8 +99,10 @@ def export_account(db: Session, user: User, now: datetime | None = None) -> dict
                 "colors": i.colors or [], "pattern": i.pattern, "warmth": i.warmth, "formality": i.formality,
                 "seasons": i.seasons or [], "brand": i.brand, "material": i.material, "is_favorite": i.is_favorite,
                 "wear_count": i.wear_count, "last_worn_at": _iso(i.last_worn_at), "archived_at": _iso(i.archived_at),
-                "ai_confidence": i.ai_confidence, "created_at": _iso(i.created_at),
-                "photo_url": storage.url(i.image_key),  # a short-lived link; download the photos with the export
+                "ai_confidence": i.ai_confidence, "ai_tags_raw": i.ai_tags_raw, "created_at": _iso(i.created_at),
+                # s3 mode: a presigned link that expires in minutes — download the photos with the export.
+                # db mode (local only): an /images/ path that needs the bearer token.
+                "photo_url": storage.url(i.image_key),
             }
             for i in items
         ],
@@ -110,6 +120,20 @@ def export_account(db: Session, user: User, now: datetime | None = None) -> dict
              "item_id": str(f.item_id) if f.item_id else None, "created_at": _iso(f.created_at)}
             for f in feedback
         ],
+        "sessions": [
+            {"device": s.device_label, "signed_in_at": _iso(s.created_at), "last_used_at": _iso(s.last_used_at), "expires_at": _iso(s.expires_at)}
+            for s in sessions
+        ],
+        "usage": {
+            "daily_counters": [
+                {"day": c.period_start.isoformat(), "feature": c.feature, "requests": c.count, "tokens": c.tokens} for c in counters
+            ],
+            "ai_requests": [
+                {"feature": r.feature, "status": r.status, "created_at": _iso(r.created_at),
+                 "input_tokens": r.input_tokens_total, "output_tokens": r.output_tokens_total}
+                for r in requests
+            ],
+        },
     }
 
 
