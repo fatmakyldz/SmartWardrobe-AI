@@ -188,19 +188,41 @@ def test_style_profile_reaches_the_prompt(client):
 
 
 def test_summary_rules():
-    def piece(cat, sub, colors, formality=3):
-        return Item(category=cat, subcategory=sub, colors=colors, formality=formality)
+    def piece(cat, sub, colors, formality=3, pattern="solid"):
+        return Item(category=cat, subcategory=sub, colors=colors, formality=formality, pattern=pattern)
 
-    liked = [piece("top", "shirt", ["navy"]), piece("bottom", "trousers", ["black"], 4),
-             piece("shoes", "loafers", ["black"], 4), piece("top", "shirt", ["white"])]
-    disliked = [piece("top", "tee", ["pink"], 1), piece("bottom", "shorts", ["black"], 1)]
+    # Two liked outfits (same shirt + trousers pairing), one disliked.
+    liked = [[piece("top", "shirt", ["navy"]), piece("bottom", "trousers", ["black"], 4), piece("shoes", "loafers", ["black"], 4)],
+             [piece("top", "shirt", ["white"]), piece("bottom", "trousers", ["black"], 4)]]
+    disliked = [[piece("top", "tee", ["pink"], 1), piece("bottom", "shorts", ["black"], 1)]]
     assert profile.build_summary(liked, disliked, "en") == (
         "Likes black, navy and white pieces. Often picks shirt, trousers and loafers. Leans formal. "
-        "Tends to skip pink.")
+        "Go-to combination: shirt + trousers. Tends to skip pink.")
     assert profile.build_summary(liked, disliked, "tr") == (
         "Siyah, lacivert ve beyaz parçaları seviyor. Sık seçtikleri: shirt, trousers ve loafers. "
-        "Tarzı daha çok resmi. Pembe tonlarını pek sevmiyor.")
+        "Tarzı daha çok resmi. Vazgeçmediği ikili: shirt + trousers. Pembe tonlarını pek sevmiyor.")
     assert profile.build_summary([], [], "en") is None
+
+
+def test_summary_patterns_layers_and_worn_weight():
+    def piece(cat, sub, colors, formality=2, pattern="solid"):
+        return Item(category=cat, subcategory=sub, colors=colors, formality=formality, pattern=pattern)
+
+    knit = [piece("top", "sweater", ["cream"], pattern="knit"), piece("bottom", "jeans", ["blue"], pattern="denim"),
+            piece("outerwear", "coat", ["brown"])]
+    plain = [piece("top", "tee", ["white"]), piece("bottom", "jeans", ["blue"], pattern="denim")]
+    floral = [piece("dress", "midi dress", ["pink"], 3, pattern="floral")]
+    # Worn twice-weighted: the knit outfit worn once outweighs the plain one liked once → knit shows
+    # up, the sweater + jeans pairing is the go-to, and the coat makes layering the norm (2 of 3).
+    text = profile.build_summary([plain], [floral, floral], "en", worn=[knit])
+    assert "Likes knit pieces." in text and "Skips floral." in text
+    assert "Go-to combination: sweater + jeans." in text and "Usually adds a layer." in text
+    # Without the worn weight the plain outfit wins: no knit sentence, no layer sentence.
+    text2 = profile.build_summary([plain, plain], [], "en", worn=[])
+    assert "knit" not in text2 and "layer" not in text2
+    assert len(text.split(". ")) <= profile.MAX_SENTENCES
+    tr = profile.build_summary([plain], [floral, floral], "tr", worn=[knit])
+    assert "Triko parçalara sıcak." in tr and "Çiçekli pek giymiyor." in tr and "Genelde üstüne bir kat alıyor." in tr
 
 
 def test_summary_refreshes_every_ten_events_or_after_a_week(client):

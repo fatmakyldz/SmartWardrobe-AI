@@ -137,15 +137,33 @@ def _join(words: list[str], lang: str) -> str:
     return f"{', '.join(words[:-1])} {'ve' if lang == 'tr' else 'and'} {words[-1]}"
 
 
-def build_summary(liked: list[Item], disliked: list[Item], lang: str) -> str | None:
-    """3–4 template sentences from colour, piece and formality counts. No LLM."""
-    if not liked and not disliked:
+WORN_WEIGHT = 2  # wearing an outfit says more than liking it
+PATTERN_SHARE = 0.25  # a non-plain pattern on this share of liked pieces is a taste, not a one-off
+NOT_A_TASTE = ('solid', 'other', 'denim')  # jeans are in every wardrobe; denim says nothing about taste
+LAYER_SHARE = 0.5  # outerwear in this share of liked outfits → "usually adds a layer"
+MAX_SENTENCES = 7  # seven short sentences ≈ 80 tokens; the TASTE SUMMARY line is budgeted at ~150 (§6)
+
+PATTERN_TR = {"striped": "çizgili", "checked": "ekose", "floral": "çiçekli", "printed": "desenli", "denim": "kot",
+              "knit": "triko", "leather": "deri"}
+
+
+def build_summary(liked: list[list[Item]], disliked: list[list[Item]], lang: str,
+                  worn: list[list[Item]] | None = None) -> str | None:
+    """Up to six template sentences, no LLM: colours, pieces, formality, patterns, the go-to combination,
+    layering, and what gets skipped. Inputs are outfits (lists of pieces); worn outfits count double."""
+    worn = worn or []
+    if not liked and not disliked and not worn:
         return None
     tr = lang == "tr"
     color = (lambda c: COLOR_TR.get(c, c)) if tr else (lambda c: c)
-    pos_colors = Counter(c for i in liked for c in i.colors)
-    neg_colors = Counter(c for i in disliked for c in i.colors)
-    pieces = Counter(i.subcategory or i.category for i in liked)
+    pattern = (lambda x: PATTERN_TR.get(x, x)) if tr else (lambda x: x)
+
+    positive = liked + worn * WORN_WEIGHT  # outfit lists; a worn outfit appears twice
+    pos_items = [i for o in positive for i in o]
+    neg_items = [i for o in disliked for i in o]
+    pos_colors = Counter(c for i in pos_items for c in i.colors)
+    neg_colors = Counter(c for i in neg_items for c in i.colors)
+    pieces = Counter(i.subcategory or i.category for i in pos_items)
     top_colors = [c for c, _ in pos_colors.most_common(3)]
     avoid = [c for c, _ in neg_colors.most_common(5) if c not in top_colors][:2]
 
@@ -156,15 +174,49 @@ def build_summary(liked: list[Item], disliked: list[Item], lang: str) -> str | N
     if pieces:
         names = _join([p for p, _ in pieces.most_common(3)], lang)
         sentences.append(f"Sık seçtikleri: {names}." if tr else f"Often picks {names}.")
-    if liked:
-        avg = sum(i.formality for i in liked) / len(liked)
+    if pos_items:
+        avg = sum(i.formality for i in pos_items) / len(pos_items)
         level = 0 if avg < 2.5 else 1 if avg < 3.5 else 2
         sentences.append(("Tarzı daha çok günlük.", "Tarzı şık-günlük.", "Tarzı daha çok resmi.")[level] if tr
                          else ("Leans casual.", "Leans smart-casual.", "Leans formal.")[level])
+
+    # Patterns: a non-plain pattern on a real share of what they like; the one they skip most.
+    pos_patterns = Counter(i.pattern for i in pos_items if i.pattern and i.pattern not in NOT_A_TASTE)
+    if pos_patterns and pos_items:
+        pat, n = pos_patterns.most_common(1)[0]
+        if n / len(pos_items) >= PATTERN_SHARE:
+            sentences.append(f"{pattern(pat).capitalize()} parçalara sıcak." if tr else f"Likes {pattern(pat)} pieces.")
+    neg_patterns = Counter(i.pattern for i in neg_items if i.pattern and i.pattern not in NOT_A_TASTE)
+    if neg_patterns:
+        pat, n = neg_patterns.most_common(1)[0]
+        if n >= 2 and pos_patterns.get(pat, 0) == 0:
+            sentences.append(f"{pattern(pat).capitalize()} pek giymiyor." if tr else f"Skips {pattern(pat)}.")
+
+    # The go-to combination: the most frequent (top, bottom) pair by piece type, or a dress.
+    combos = Counter()
+    for o in positive:
+        top = next((i for i in o if i.category == "top"), None)
+        bottom = next((i for i in o if i.category == "bottom"), None)
+        dress = next((i for i in o if i.category == "dress"), None)
+        if top and bottom:
+            combos[f"{top.subcategory or 'top'} + {bottom.subcategory or 'bottom'}"] += 1
+        elif dress:
+            combos[dress.subcategory or "dress"] += 1
+    if combos:
+        combo, n = combos.most_common(1)[0]
+        if n >= 2:
+            sentences.append(f"Vazgeçmediği ikili: {combo}." if tr else f"Go-to combination: {combo}.")
+
+    # Layers: outerwear in most liked outfits.
+    if positive:
+        layered = sum(1 for o in positive if any(i.category == "outerwear" for i in o))
+        if layered / len(positive) >= LAYER_SHARE and len(positive) >= 2:
+            sentences.append("Genelde üstüne bir kat alıyor." if tr else "Usually adds a layer.")
+
     if avoid:
         names = _join([color(c) for c in avoid], lang)
         sentences.append(f"{names.capitalize()} tonlarını pek sevmiyor." if tr else f"Tends to skip {names}.")
-    return " ".join(sentences) or None
+    return " ".join(sentences[:MAX_SENTENCES]) or None
 
 
 def refresh_style_summary(db: Session, user: User, now: datetime | None = None) -> str | None:
@@ -176,13 +228,14 @@ def refresh_style_summary(db: Session, user: User, now: datetime | None = None) 
         .order_by(FeedbackEvent.created_at.desc())
         .limit(SUMMARY_WINDOW)
     ).all()
-    liked, disliked = [], []
+    liked, disliked, worn = [], [], []
     for e in events:
         outfit = db.get(Outfit, e.outfit_id)
         if outfit is None:
             continue
-        (disliked if e.kind == "dislike" else liked).extend(outfit_items(db, outfit))
-    user.style_summary = build_summary(liked, disliked, user.locale)
+        pieces = outfit_items(db, outfit)
+        (disliked if e.kind == "dislike" else worn if e.kind == "worn" else liked).append(pieces)
+    user.style_summary = build_summary(liked, disliked, user.locale, worn)
     user.style_summary_at = now
     db.commit()
     return user.style_summary
