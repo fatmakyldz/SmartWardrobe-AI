@@ -189,6 +189,8 @@ class OutfitOut(BaseModel):
     rating: int
     items: list[ItemOut]
     created_at: datetime
+    source: str = "ai"  # ai | ai_edited | user
+    worn_at: datetime | None = None
 
 
 class SuggestOut(BaseModel):

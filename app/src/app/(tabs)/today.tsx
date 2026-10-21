@@ -6,11 +6,11 @@ import { ActivityIndicator, Pressable, useWindowDimensions, View } from 'react-n
 import { CityPicker } from '@/components/CityPicker';
 import { Button, Chip, Field, Notice, Screen, T, tap } from '@/components/ui';
 import { OutfitBoard } from '@/components/wardrobe';
-import { api, Occasion, OCCASIONS, Outfit } from '@/lib/api';
+import { api, Intent, Occasion, OCCASIONS, Outfit } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useErrorText } from '@/lib/errors';
 import { skyKey, useI18n } from '@/lib/i18n';
-import { useFeedback, useItems, useLatestOutfits, useOutfits, useSuggest } from '@/lib/queries';
+import { useFeedback, useItems, useLatestIntent, useLatestOutfits, useOutfits, useSuggest, useWorn } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
 
 export default function Today() {
@@ -23,6 +23,7 @@ export default function Today() {
 
   const [occasion, setOccasion] = useState<Occasion>('casual');
   const [note, setNote] = useState('');
+  const [parse, setParse] = useState(false); // send the text as `request` (parsed, one extra AI request)
   const [pickingCity, setPickingCity] = useState(false);
 
   const items = useItems();
@@ -37,6 +38,8 @@ export default function Today() {
 
   const suggest = useSuggest();
   const feedback = useFeedback();
+  const worn = useWorn();
+  const intent = useLatestIntent().data;
 
   const cats = new Set((items.data ?? []).map((i) => i.category));
   const ready = cats.has('dress') || (cats.has('top') && cats.has('bottom'));
@@ -133,21 +136,40 @@ export default function Today() {
             ))}
           </View>
           <Field
-            label={t.today.note}
-            placeholder={t.today.notePlaceholder}
+            label={parse ? t.today.request : t.today.note}
+            placeholder={parse ? t.today.requestPlaceholder : t.today.notePlaceholder}
             value={note}
             onChangeText={setNote}
             maxLength={200}
           />
+          {note.trim() ? (
+            <View style={{ gap: space.xs }}>
+              <View style={{ flexDirection: 'row' }}>
+                <Chip label={t.today.parseWithAi} selected={parse} onPress={() => setParse((v) => !v)} />
+              </View>
+              {parse ? (
+                <T variant="small" color="muted">
+                  {t.today.parseHint}
+                </T>
+              ) : null}
+            </View>
+          ) : null}
           {suggest.isError ? <Notice tone="error">{errorText(suggest.error)}</Notice> : null}
           <Button
             label={suggest.isPending ? t.today.suggesting : outfits.length ? t.today.again : t.today.suggest}
             loading={suggest.isPending}
             onPress={() => {
               tap();
-              suggest.mutate({ occasion, note: note.trim(), lang });
+              const text = note.trim();
+              setAutoShown(false);
+              suggest.mutate(parse && text ? { occasion, note: '', request: text, lang } : { occasion, note: text, lang });
             }}
           />
+          {intent ? (
+            <T variant="small" color="muted">
+              {t.today.understood} {intentSummary(intent, t)}
+            </T>
+          ) : null}
         </View>
       )}
 
@@ -160,9 +182,29 @@ export default function Today() {
             width={boardWidth}
             onRate={(r) => rate(o, r)}
             onOpenItem={(item) => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
+            onWorn={() => worn.mutate(o.id)}
+            onEdit={user?.is_demo ? undefined : () => router.push({ pathname: '/outfit/[id]', params: { id: o.id } })}
           />
         ))}
       </View>
     </Screen>
   );
+}
+
+/** "work · no dress · with navy · with a layer" — the parsed request in the user's words. */
+function intentSummary(i: Intent, t: ReturnType<typeof useI18n>['t']): string {
+  const parts: string[] = [];
+  if (i.occasion) parts.push(t.occasions[i.occasion]);
+  const lc = (x: string) => x.toLowerCase();
+  const inc = [...i.include_categories.map((c) => lc(t.categories[c])), ...i.include_colors.map((c) => lc(t.colors[c as keyof typeof t.colors] ?? c))];
+  if (inc.length) parts.push(t.today.with(inc.join(', ')));
+  const avoid = [
+    ...i.avoid_categories.map((c) => lc(t.categories[c])),
+    ...i.avoid_colors.map((c) => lc(t.colors[c as keyof typeof t.colors] ?? c)),
+    ...i.avoid_patterns.map((x) => lc(t.patterns[x as keyof typeof t.patterns] ?? x)),
+  ];
+  if (avoid.length) parts.push(t.today.avoid(avoid.join(', ')));
+  if (i.wants_outerwear === true) parts.push(t.today.outerwearYes);
+  if (i.wants_outerwear === false) parts.push(t.today.outerwearNo);
+  return parts.length ? parts.join(' · ') : i.brief;
 }

@@ -47,11 +47,15 @@ export function OutfitBoard({
   width,
   onRate,
   onOpenItem,
+  onWorn,
+  onEdit,
 }: {
   outfit: Outfit;
   width: number;
   onRate?: (r: -1 | 1) => void;
   onOpenItem?: (item: Item) => void;
+  onWorn?: () => void; // "wore it today"; the button turns into a state once worn_at is today
+  onEdit?: () => void;
 }) {
   const p = usePalette();
   const { t } = useI18n();
@@ -91,8 +95,22 @@ export function OutfitBoard({
         <T variant="body" color="inkSoft" style={{ marginTop: space.xs }}>
           {outfit.reason}
         </T>
-        {onRate ? (
+        {onWorn || onEdit ? (
           <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.lg }}>
+            {onWorn ? (
+              <Button
+                label={wornToday(outfit) ? t.today.wornDone : t.today.worn}
+                kind={wornToday(outfit) ? 'primary' : 'secondary'}
+                onPress={onWorn}
+                disabled={wornToday(outfit)}
+                style={{ flex: 1 }}
+              />
+            ) : null}
+            {onEdit ? <Button label={t.today.edit} kind="ghost" onPress={onEdit} style={{ flex: 1 }} /> : null}
+          </View>
+        ) : null}
+        {onRate ? (
+          <View style={{ flexDirection: 'row', gap: space.sm, marginTop: onWorn || onEdit ? space.sm : space.lg }}>
             <Button
               label={outfit.rating === 1 ? t.today.liked : t.today.like}
               kind={outfit.rating === 1 ? 'primary' : 'secondary'}
@@ -111,6 +129,13 @@ export function OutfitBoard({
       </View>
     </View>
   );
+}
+
+export function wornToday(outfit: Outfit): boolean {
+  if (!outfit.worn_at) return false;
+  const d = new Date(outfit.worn_at);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
 function Piece({

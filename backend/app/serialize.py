@@ -37,4 +37,6 @@ def outfit_out(outfit: Outfit, items_by_id: dict[str, Item] | None = None) -> Ou
         rating=outfit.rating,
         items=items,
         created_at=outfit.created_at,
+        source=outfit.source,
+        worn_at=outfit.worn_at,
     )

@@ -89,6 +89,54 @@ export type Outfit = {
   rating: -1 | 0 | 1;
   items: Item[];
   created_at: string;
+  source: 'ai' | 'ai_edited' | 'user';
+  worn_at: string | null;
+};
+
+/** A free-text request as the vocabulary values the backend understood (AI-06). */
+export type Intent = {
+  occasion: Occasion | null;
+  include_categories: Category[];
+  include_colors: string[];
+  avoid_categories: Category[];
+  avoid_colors: string[];
+  avoid_patterns: string[];
+  wants_outerwear: boolean | null;
+  brief: string;
+};
+
+export type GapCode =
+  | 'missing_category'
+  | 'occasion_uncovered'
+  | 'season_uncovered'
+  | 'few_shoes'
+  | 'low_neutrals'
+  | 'orphan_items';
+export type Gap = {
+  code: GapCode;
+  category: Category | null;
+  occasion: Occasion | null;
+  season: string | null;
+  severity: 1 | 2 | 3;
+  item_ids: string[];
+};
+export type WardrobeAnalysis = {
+  season: string;
+  items: number;
+  per_category: Partial<Record<Category, number>>;
+  outfits_possible: number;
+  neutral_share: number;
+  gaps: Gap[];
+};
+export type Capsule = {
+  occasions: Occasion[];
+  season: string;
+  items: Item[];
+  outfits_possible: number;
+  sample_outfits: string[][];
+  gaps: Gap[];
+  summary: string | null;
+  tips: string[];
 };
 
 export type City = { name: string | null; label: string; lat: number; lon: number };
@@ -259,10 +307,17 @@ export const api = {
   updateItem: (id: string, b: Partial<Tags>) => request<Item>(`/items/${id}`, json('PATCH', b)),
   deleteItem: (id: string) => request<void>(`/items/${id}`, { method: 'DELETE' }),
 
-  suggest: (b: { occasion: Occasion; note: string; lang: string; lat?: number; lon?: number }) =>
-    request<{ weather: Weather | null; outfits: Outfit[] }>('/outfits/suggest', json('POST', b)),
+  suggest: (b: { occasion: Occasion; note: string; request?: string; lang: string; lat?: number; lon?: number }) =>
+    request<{ weather: Weather | null; outfits: Outfit[]; intent: Intent | null }>('/outfits/suggest', json('POST', b)),
   outfits: (likedOnly: boolean) => request<Outfit[]>(`/outfits${likedOnly ? '?liked_only=true' : ''}`),
   feedback: (id: string, rating: -1 | 0 | 1) => request<Outfit>(`/outfits/${id}/feedback`, json('POST', { rating })),
+  worn: (id: string) => request<Outfit>(`/outfits/${id}/worn`, { method: 'POST' }),
+  createOutfit: (b: { item_ids: string[]; occasion: Occasion; title?: string; lang: string }) =>
+    request<Outfit>('/outfits', json('POST', b)),
+  updateOutfitItems: (id: string, item_ids: string[]) => request<Outfit>(`/outfits/${id}/items`, json('PATCH', { item_ids })),
+  analysis: () => request<WardrobeAnalysis>('/items/analysis'),
+  capsule: (b: { occasions: Occasion[]; size: number; lang: string; explain: boolean }) =>
+    request<Capsule>('/outfits/capsule', json('POST', b)),
 
   weather: (lat: number, lon: number) => request<Weather>(`/weather?lat=${lat}&lon=${lon}`),
   cities: (q: string, lang: string) => request<City[]>(`/cities?q=${encodeURIComponent(q)}&lang=${lang}`),
