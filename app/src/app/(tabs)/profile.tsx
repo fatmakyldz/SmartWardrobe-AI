@@ -5,10 +5,11 @@ import { Alert, Linking, Platform, View } from 'react-native';
 
 import { CityPicker } from '@/components/CityPicker';
 import { Button, Chip, Notice, Screen, T } from '@/components/ui';
-import { api } from '@/lib/api';
+import { api, FEATURES } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useErrorText } from '@/lib/errors';
 import { Lang, useI18n } from '@/lib/i18n';
+import { useEntitlements } from '@/lib/queries';
 import { LANG_LABELS, SUPPORTED_LANGS } from '@/lib/langs';
 import { space, usePalette } from '@/lib/theme';
 
@@ -32,6 +33,7 @@ export default function Profile() {
   const [pickingCity, setPickingCity] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const ent = useEntitlements(!!user).data;
 
   if (!user) return null;
 
@@ -71,6 +73,31 @@ export default function Profile() {
         <View style={{ marginTop: space.xl, gap: space.md }}>
           <Notice>{t.profile.demoBanner}</Notice>
           <Button label={t.profile.createReal} onPress={() => router.push('/claim')} />
+        </View>
+      ) : null}
+
+      {ent ? (
+        <View style={{ marginTop: space.xxl, padding: space.lg, borderRadius: 16, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line, gap: space.sm }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <T variant="heading">{t.profile.plan}</T>
+            <T variant="smallStrong" style={{ color: p.tapeInk, backgroundColor: p.tape, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 }}>
+              {t.profile.planNames[ent.plan] ?? ent.plan}
+            </T>
+          </View>
+          <T variant="body" color="inkSoft">
+            {t.profile.planPieces(ent.items_used, ent.max_items)}
+          </T>
+          <T variant="body" color="inkSoft">
+            {t.profile.planRequests(ent.usage.requests_left, ent.daily_ai_requests)}
+          </T>
+          <T variant="small" color="muted" style={{ marginTop: space.xs }}>
+            {t.profile.planFeatures}: {FEATURES.filter((f) => ent.features.includes(f)).map((f) => t.profile.featureNames[f]).join(' · ')}
+          </T>
+          {ent.plan !== 'premium' ? (
+            <T variant="small" color="muted">
+              {t.profile.premiumSoon}
+            </T>
+          ) : null}
         </View>
       ) : null}
 

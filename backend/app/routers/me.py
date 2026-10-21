@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from ..ai import telemetry
 from ..db import get_db
 from ..models import User
-from ..schemas import StyleIn, StyleOut, UserOut, UserUpdate
+from ..entitlements import entitlements
+from ..entitlements.service import check_ai_budget, plans_config
+from ..schemas import AfterVerifyOut, EntitlementsOut, StyleIn, StyleOut, UsageOut, UserOut, UserUpdate
 from ..security import current_user
 from ..services import profile
 
@@ -28,6 +30,30 @@ def delete_me(user: User = Depends(current_user), db: Session = Depends(get_db))
     telemetry.forget_subject(db, user.id)  # same transaction as the account rows
     profile.delete_account(db, user)
     return Response(status_code=204)
+
+
+@router.get("/entitlements", response_model=EntitlementsOut)
+def my_entitlements(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Plan, limits, features and today's usage (AI-08). Read-only; the gateway's own budget check is the
+    one that decides a request, this is the same numbers for the app to show."""
+    ent = entitlements(user, db)
+    decision = check_ai_budget(db, user.id, "suggest", 0, ent, user.timezone)
+    used_requests = ent.daily_ai_requests - (decision.remaining_requests or 0)
+    verified = user.is_demo or user.email_verified_at is not None
+    after_verify = None
+    if not verified:
+        nxt = user.plan if user.plan in plans_config()["plans"] else "free"
+        np_ = plans_config()["plans"][nxt]
+        after_verify = AfterVerifyOut(plan=nxt, max_items=np_["max_items"], daily_ai_requests=np_["daily_ai_requests"])
+    return EntitlementsOut(
+        plan=ent.plan, verified=verified, after_verify=after_verify,
+        max_items=ent.max_items, items_used=sum(1 for i in user.items if i.archived_at is None),
+        daily_ai_requests=ent.daily_ai_requests, daily_ai_tokens=ent.daily_ai_tokens,
+        features=sorted(ent.allowed_features), model_tier=ent.model_tier, history_limit=ent.history_limit,
+        usage=UsageOut(requests_used=max(0, used_requests), requests_left=decision.remaining_requests or 0,
+                       tokens_used=ent.daily_ai_tokens - decision.remaining_tokens, tokens_left=decision.remaining_tokens,
+                       reset_at=decision.reset_at),
+    )
 
 
 def _style_out(user: User) -> StyleOut:

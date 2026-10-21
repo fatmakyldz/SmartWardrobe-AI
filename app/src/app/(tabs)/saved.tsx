@@ -6,16 +6,15 @@ import { Chip, Notice, Screen, T } from '@/components/ui';
 import { OutfitBoard } from '@/components/wardrobe';
 import { Outfit } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
-import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
-import { useFeedback, useOutfits, useWorn } from '@/lib/queries';
+import { useFeedback, useHasFeature, useOutfits, useWorn } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
 
 export default function Saved() {
   const p = usePalette();
   const { t } = useI18n();
   const errorText = useErrorText();
-  const { user } = useAuth();
+  const canEdit = useHasFeature('user_outfits') === true;
   const [liked, setLiked] = useState(true);
   const outfits = useOutfits(liked);
   const feedback = useFeedback();
@@ -52,7 +51,7 @@ export default function Saved() {
             onRate={(r) => rate(o, r)}
             onOpenItem={(item) => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
             onWorn={() => worn.mutate(o.id)}
-            onEdit={user?.is_demo ? undefined : () => router.push({ pathname: '/outfit/[id]', params: { id: o.id } })}
+            onEdit={canEdit ? () => router.push({ pathname: '/outfit/[id]', params: { id: o.id } }) : undefined}
           />
         ))}
       </View>

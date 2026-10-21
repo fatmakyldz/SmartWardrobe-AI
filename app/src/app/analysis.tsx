@@ -6,16 +6,15 @@ import { Button, Notice, Screen, T } from '@/components/ui';
 import { ItemTile } from '@/components/wardrobe';
 import { Gap } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
-import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
-import { useAnalysis, useItems } from '@/lib/queries';
+import { useAnalysis, useHasFeature, useItems } from '@/lib/queries';
 import { space, usePalette } from '@/lib/theme';
 
 /** What the wardrobe is missing (AI-06 `GET /items/analysis`): deterministic, no AI request, every plan. */
 export default function Analysis() {
   const p = usePalette();
   const { t, lang } = useI18n();
-  const { user } = useAuth();
+  const canCapsule = useHasFeature('capsule') === true;
   const errorText = useErrorText();
   const analysis = useAnalysis();
   const items = useItems();
@@ -95,7 +94,7 @@ export default function Analysis() {
             ))
           )}
 
-          {a.items && !user?.is_demo ? (
+          {a.items && canCapsule ? (
             <Button label={t.analysis.capsuleLink} kind="secondary" onPress={() => router.push('/capsule')} />
           ) : null}
         </View>

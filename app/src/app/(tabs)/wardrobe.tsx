@@ -8,16 +8,15 @@ import { Button, Chip, Notice, T, tap } from '@/components/ui';
 import { ItemTile } from '@/components/wardrobe';
 import { Category, CATEGORIES } from '@/lib/api';
 import { useErrorText } from '@/lib/errors';
-import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
-import { useItems } from '@/lib/queries';
+import { useHasFeature, useItems } from '@/lib/queries';
 import { radius, space, usePalette } from '@/lib/theme';
 
 export default function Wardrobe() {
   const p = usePalette();
   const { t } = useI18n();
   const errorText = useErrorText();
-  const { user } = useAuth();
+  const canBuild = useHasFeature('user_outfits') === true;
   const items = useItems();
   const [filter, setFilter] = useState<Category | 'all'>('all');
   const { width } = useWindowDimensions();
@@ -52,7 +51,7 @@ export default function Wardrobe() {
         {items.data?.length ? (
           <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md }}>
             <Button label={t.analysis.link} kind="ghost" onPress={() => router.push('/analysis')} style={{ flex: 1 }} />
-            {!user?.is_demo ? (
+            {canBuild ? (
               <Button label={t.outfitEdit.newTitle} kind="ghost" onPress={() => router.push({ pathname: '/outfit/[id]', params: { id: 'new' } })} style={{ flex: 1 }} />
             ) : null}
           </View>
