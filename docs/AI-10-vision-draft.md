@@ -1,7 +1,7 @@
 # After V1.0: from "digital closet" to a decision engine — DRAFT, not approved
 
-Status: a proposal for discussion (22 Oct 2026). `AI-00-foundation.md` stays the approved architecture; nothing here
-changes it until it is folded into §13 as new rows. The thesis (Fatma's note of 22 Oct): the category is a feature
+Status: AI-10 approved on 22 Oct 2026 (its §13 row in `AI-00-foundation.md` is binding); AI-11 and later remain
+proposals — no AI-11 work before Beta Tur 2 data. The thesis (Fatma's note of 22 Oct): the category is a feature
 race, so the way to stand out is not another feature but a loop — **scan → learn → dress → learn → buy smarter** —
 where the app knows the person and predicts what they will wear.
 
@@ -38,7 +38,7 @@ beta-instrumentation PR), piece price (optional field, AI-10 schema), declutter 
 
 ## Proposed phases (one PR each, same discipline as AI-01…09)
 
-### AI-10 Taste model (the learning loop) — V1.1
+### AI-10 Taste model (the learning loop) — Public V1.0 candidate, gated on Beta Tur 2
 Replace the prose-only memory with a small, deterministic **taste profile** computed from the person's own events —
 no new prompts, no LLM in the loop, pure functions in `ai/analysis.py`-style code:
 - per-attribute scores from like / skip / worn with time decay: colour pairs, silhouettes (subcategory), formality
@@ -50,7 +50,8 @@ no new prompts, no LLM in the loop, pure functions in `ai/analysis.py`-style cod
   same scores, shown on the Style screen; no quiz.
 - Schema: one new table `taste_profiles(user_id, computed_at, profile JSON)` recomputed after feedback (cheap) — or
   computed on the fly for V1.1 and cached; decide in the design row.
-- KPI: like-rate of the first suggestion per day (baseline from `ai_report.py` first), skip-rate of "AVOID" pieces → 0.
+- KPI: acceptance (liked or worn / shown) in Beta Tur 2 ≥ Tur 1 + 10 points and ≥ 40 % on days 6–7 (`ai_report --beta`). AVOID (3+ rejections → never suggested again) is proven by automated tests, not by asking testers to reject things; in beta data it is only observed.
+- Two PRs: **AI-10a** taste model — schema (`taste_profiles`, optional `items.price`), pure computation in `ai/taste.py`, recompute hook in `services/taste.py`, `TASTE PROFILE:` + `AVOID:` in the suggest context, `suggest/v2`, snapshot and AVOID tests. **AI-10b** surface — `GET /me/style` DNA axes, Style screen UI, grounded `why` facts on the outfit card, `ai_report --beta` reads the new signals. One review each; the suggest behaviour change and the mobile UI never share a PR.
 
 ### AI-11 Proactive morning fit — V1.1
 "Open the app, no questions":
