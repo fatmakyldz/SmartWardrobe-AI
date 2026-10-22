@@ -15,6 +15,27 @@ where the app knows the person and predicts what they will wear.
 | "What's missing / what to add" | deterministic `ai/analysis.py` gaps + capsule | no link to shopping; no cost-per-wear |
 | Style DNA percentages | style questionnaire (3 answers) + taste summary | no numeric profile |
 
+## The six engines and where they land (revised 22 Oct, after the beta plan)
+
+One data loop feeds everything: wardrobe → wear history → Style Brain → declutter → gaps → shopping. The engines are
+not features to add; they are views on the same profile, so AI-10 comes first and the rest read it.
+
+| Engine | What it is | Version | Needs beyond V1.0 data |
+|---|---|---|---|
+| 1 Style Brain | the taste profile: what you choose, skip, wear, pair; per occasion | **Public V1.0** (gated on beta Tur 2) | AI-10 row in §13 |
+| 2 Wardrobe Intelligence | never / rarely / most worn, forgotten pieces, hard-to-combine, duplicates, heroes | V1.1 | nothing: `wear_count`, `last_worn_at`, `analysis.py` |
+| 3 Revive | "not worn for 4 months — here are 3 outfits with it" | V1.1 | suggest with an `include` piece (exists for intent) |
+| 4 Declutter | Keep / Restyle / Sell / Donate, one piece at a time, with the reasons from 1–3 | V1.2 | `archived_at` (exists), a decision event, optional `items.price` for cost-per-wear |
+| 5 Shopping Intelligence | "should I buy this?" — tag a shared photo/link, match against the real wardrobe; wardrobe gaps as a shopping list | V2 | share-sheet entry, no retailer integration |
+| 6 Shopping Agent / search | "a jacket under 3.000 TL that makes 10+ outfits with my wardrobe", "pack for Italy in May and find what's missing" | V2.x | web search, price/stock/size, affiliate — the separate beast |
+
+Fast Wardrobe (multi-item scan) sits beside these as an onboarding engine, gated on the #32 experiment (≥ 18/20).
+Public V1.0 = Fast Wardrobe + AI Styling + Style Brain (+ multi-item if it passes). Nothing else, by decision.
+
+Data to collect from now on so the later engines have history: like / skip / worn / last worn (collected),
+suggested-but-never-chosen (derivable from `outfit_items` + feedback), raw AI tags vs edited (collected since the
+beta-instrumentation PR), piece price (optional field, AI-10 schema), declutter decisions (V1.2 event).
+
 ## Proposed phases (one PR each, same discipline as AI-01…09)
 
 ### AI-10 Taste model (the learning loop) — V1.1
