@@ -14,7 +14,7 @@ import { useAnalysis, useCreateItem, useItems } from '@/lib/queries';
 import { radius, space, usePalette } from '@/lib/theme';
 
 
-type Draft = { key: string; url: string; isClothing: boolean; aiSkipped: boolean; tags: Tags; uncertain: (keyof Tags)[]; confidence: number | null };
+type Draft = { key: string; url: string; isClothing: boolean; aiSkipped: boolean; tags: Tags; aiTags: Tags | null; uncertain: (keyof Tags)[]; confidence: number | null };
 
 /**
  * One photo → AI tags → the user confirms → saved. With `?first=1` (right after sign-up) it chains:
@@ -67,7 +67,7 @@ export default function NewItem() {
     try {
       const out = await api.analyze(asset as PickedImage, lang);
       setDraft({ key: out.image_key, url: out.image_url, isClothing: out.is_clothing, aiSkipped: !!out.ai_skipped, tags: out.tags,
-                 uncertain: out.uncertain ?? [], confidence: out.confidence ?? null });
+                 aiTags: out.ai_skipped ? null : out.tags, uncertain: out.uncertain ?? [], confidence: out.confidence ?? null });
     } catch (e) {
       setError(errorText(e));
       setPreview(null);
@@ -81,7 +81,7 @@ export default function NewItem() {
     setError(null);
     try {
       const prev = before.current ?? analysis.data?.outfits_possible ?? 0;
-      await create.mutateAsync({ ...draft.tags, image_key: draft.key, ai_confidence: draft.confidence });
+      await create.mutateAsync({ ...draft.tags, image_key: draft.key, ai_confidence: draft.confidence, ai_tags_raw: draft.aiTags });
       const fresh = await analysis.refetch();
       const now = fresh.data?.outfits_possible ?? 0;
       const gained = now - prev;

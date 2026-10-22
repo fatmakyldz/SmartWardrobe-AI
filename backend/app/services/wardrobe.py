@@ -38,7 +38,8 @@ def create_item(db: Session, user: User, values: dict, max_items: int) -> Item:
         raise bad_request("wardrobe_full")
     # The key must be one this user uploaded via /items/analyze and not on another item yet.
     img = images.claim_upload(db, user, values["image_key"])
-    item = Item(user_id=user.id, **clean(values))
+    raw = values.pop("ai_tags_raw", None)
+    item = Item(user_id=user.id, ai_tags_raw=raw, **clean(values))
     db.add(item)
     db.flush()
     images.attach(img, item)
