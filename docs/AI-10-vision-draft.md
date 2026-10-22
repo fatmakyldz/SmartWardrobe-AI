@@ -1,7 +1,7 @@
 # After V1.0: from "digital closet" to a decision engine — DRAFT, not approved
 
-Status: a proposal for discussion (22 Oct 2026). `AI-00-foundation.md` stays the approved architecture; nothing here
-changes it until it is folded into §13 as new rows. The thesis (Fatma's note of 22 Oct): the category is a feature
+Status: AI-10 approved on 22 Oct 2026 (its §13 row in `AI-00-foundation.md` is binding); AI-11 and later remain
+proposals — no AI-11 work before Beta Tur 2 data. The thesis (Fatma's note of 22 Oct): the category is a feature
 race, so the way to stand out is not another feature but a loop — **scan → learn → dress → learn → buy smarter** —
 where the app knows the person and predicts what they will wear.
 
@@ -15,9 +15,30 @@ where the app knows the person and predicts what they will wear.
 | "What's missing / what to add" | deterministic `ai/analysis.py` gaps + capsule | no link to shopping; no cost-per-wear |
 | Style DNA percentages | style questionnaire (3 answers) + taste summary | no numeric profile |
 
+## The six engines and where they land (revised 22 Oct, after the beta plan)
+
+One data loop feeds everything: wardrobe → wear history → Style Brain → declutter → gaps → shopping. The engines are
+not features to add; they are views on the same profile, so AI-10 comes first and the rest read it.
+
+| Engine | What it is | Version | Needs beyond V1.0 data |
+|---|---|---|---|
+| 1 Style Brain | the taste profile: what you choose, skip, wear, pair; per occasion | **Public V1.0** (gated on beta Tur 2) | AI-10 row in §13 |
+| 2 Wardrobe Intelligence | never / rarely / most worn, forgotten pieces, hard-to-combine, duplicates, heroes | V1.1 | nothing: `wear_count`, `last_worn_at`, `analysis.py` |
+| 3 Revive | "not worn for 4 months — here are 3 outfits with it" | V1.1 | suggest with an `include` piece (exists for intent) |
+| 4 Declutter | Keep / Restyle / Sell / Donate, one piece at a time, with the reasons from 1–3 | V1.2 | `archived_at` (exists), a decision event, optional `items.price` for cost-per-wear |
+| 5 Shopping Intelligence | "should I buy this?" — tag a shared photo/link, match against the real wardrobe; wardrobe gaps as a shopping list | V2 | share-sheet entry, no retailer integration |
+| 6 Shopping Agent / search | "a jacket under 3.000 TL that makes 10+ outfits with my wardrobe", "pack for Italy in May and find what's missing" | V2.x | web search, price/stock/size, affiliate — the separate beast |
+
+Fast Wardrobe (multi-item scan) sits beside these as an onboarding engine, gated on the #32 experiment (≥ 18/20).
+Public V1.0 = Fast Wardrobe + AI Styling + Style Brain (+ multi-item if it passes). Nothing else, by decision.
+
+Data to collect from now on so the later engines have history: like / skip / worn / last worn (collected),
+suggested-but-never-chosen (derivable from `outfit_items` + feedback), raw AI tags vs edited (collected since the
+beta-instrumentation PR), piece price (optional field, AI-10 schema), declutter decisions (V1.2 event).
+
 ## Proposed phases (one PR each, same discipline as AI-01…09)
 
-### AI-10 Taste model (the learning loop) — V1.1
+### AI-10 Taste model (the learning loop) — Public V1.0 candidate, gated on Beta Tur 2
 Replace the prose-only memory with a small, deterministic **taste profile** computed from the person's own events —
 no new prompts, no LLM in the loop, pure functions in `ai/analysis.py`-style code:
 - per-attribute scores from like / skip / worn with time decay: colour pairs, silhouettes (subcategory), formality
@@ -29,7 +50,8 @@ no new prompts, no LLM in the loop, pure functions in `ai/analysis.py`-style cod
   same scores, shown on the Style screen; no quiz.
 - Schema: one new table `taste_profiles(user_id, computed_at, profile JSON)` recomputed after feedback (cheap) — or
   computed on the fly for V1.1 and cached; decide in the design row.
-- KPI: like-rate of the first suggestion per day (baseline from `ai_report.py` first), skip-rate of "AVOID" pieces → 0.
+- KPI: acceptance (liked or worn / shown) in Beta Tur 2 ≥ Tur 1 + 10 points and ≥ 40 % on days 6–7 (`ai_report --beta`). AVOID (3+ rejections → never suggested again) is proven by automated tests, not by asking testers to reject things; in beta data it is only observed.
+- Two PRs: **AI-10a** taste model — schema (`taste_profiles`, optional `items.price`), pure computation in `ai/taste.py`, recompute hook in `services/taste.py`, `TASTE PROFILE:` + `AVOID:` in the suggest context, `suggest/v2`, snapshot and AVOID tests. **AI-10b** surface — `GET /me/style` DNA axes, Style screen UI, grounded `why` facts on the outfit card, `ai_report --beta` reads the new signals. One review each; the suggest behaviour change and the mobile UI never share a PR.
 
 ### AI-11 Proactive morning fit — V1.1
 "Open the app, no questions":
