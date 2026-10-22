@@ -121,7 +121,7 @@ export function useAnalysis(enabled = true) {
 export function useCreateItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (b: Tags & { image_key: string; ai_confidence?: number | null }) => api.createItem(b),
+    mutationFn: (b: Tags & { image_key: string; ai_confidence?: number | null; ai_tags_raw?: Tags | null }) => api.createItem(b),
     onSuccess: (item) => {
       qc.setQueryData<Item[]>(keys.items, (old) => [item, ...(old ?? [])]);
       void qc.invalidateQueries({ queryKey: keys.analysis });

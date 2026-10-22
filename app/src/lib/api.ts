@@ -335,7 +335,8 @@ export const api = {
       body: form,
     });
   },
-  createItem: (b: Tags & { image_key: string; ai_confidence?: number | null }) => request<Item>('/items', json('POST', b)),
+  createItem: (b: Tags & { image_key: string; ai_confidence?: number | null; ai_tags_raw?: Tags | null }) =>
+    request<Item>('/items', json('POST', b)),
   updateItem: (id: string, b: Partial<Tags>) => request<Item>(`/items/${id}`, json('PATCH', b)),
   deleteItem: (id: string) => request<void>(`/items/${id}`, { method: 'DELETE' }),
 

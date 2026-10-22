@@ -6,6 +6,10 @@ unverified → verified conversion for the accounts registered in the period. Re
     python scripts/ai_report.py                          # yesterday (UTC)
     python scripts/ai_report.py --date 2026-10-19
     python scripts/ai_report.py --days 7                 # the 7 days up to yesterday (weekly)
+    python scripts/ai_report.py --beta 2026-10-27        # the closed-beta cohort: accounts registered since that
+                                                         # day, by day since sign-up (retention, acceptance, worn,
+                                                         # tag edits, pieces) — the beta plan's metrics
+    python scripts/ai_report.py --beta 2026-10-27 --emails a@x.com,b@x.com   # only these testers
 """
 
 import argparse
@@ -19,7 +23,7 @@ import sqlalchemy as sa
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.models import AIRequest, AIRequestAttempt, Outfit, User  # noqa: E402
+from app.models import AIRequest, AIRequestAttempt, FeedbackEvent, Item, Outfit, OutfitItem, User  # noqa: E402
 
 
 def _pct(part: int, whole: int) -> str:
@@ -139,17 +143,147 @@ def onboarding_lines(conn: sa.Connection, start: datetime, end: datetime) -> lis
     return lines
 
 
+TAG_FIELDS = ("category", "subcategory", "colors", "pattern", "warmth", "formality", "seasons")
+
+
+def beta_report(conn: sa.Connection, since: date, emails: list[str] | None = None, days: int = 7,
+                now: datetime | None = None) -> str:
+    """The closed beta, read by day since each tester's sign-up (day 0 = the sign-up day), so testers who
+    joined on different dates line up. Everything comes from server records: no survey.
+
+    - active: any of an AI request, an item added, an outfit created, a rating or a worn mark that day
+    - acceptance: AI outfits created that day that were liked or worn (rating 1 or worn_at) / AI outfits shown
+    - worn: days with a worn outfit / active days
+    - tag edits: fields the person changed before saving, against ai_tags_raw (pieces with raw tags only)
+    - AVOID: pieces disliked in 3+ outfits that still appear in a later AI outfit
+    """
+    now = now or datetime.now(timezone.utc)
+    start = datetime.combine(since, time.min, tzinfo=timezone.utc)
+    q = sa.select(User.id, User.email, User.created_at, User.email_verified_at).where(
+        User.created_at >= start, User.is_demo.is_(False))
+    if emails:
+        q = q.where(sa.func.lower(User.email).in_([e.strip().lower() for e in emails if e.strip()]))
+    users = conn.execute(q).all()
+    lines = [f"beta cohort since {since}: {len(users)} testers"]
+    if not users:
+        return "\n".join(lines)
+    ids = [u.id for u in users]
+    created = {u.id: _aware(u.created_at) for u in users}
+
+    def day_of(uid, at) -> int:
+        return (_aware(at).date() - created[uid].date()).days
+
+    active: dict = defaultdict(set)  # user -> {day}
+    for uid, at in conn.execute(sa.select(AIRequest.subject_id, AIRequest.created_at).where(AIRequest.subject_id.in_(ids))):
+        active[uid].add(day_of(uid, at))
+    items = conn.execute(sa.select(Item.id, Item.user_id, Item.created_at, Item.ai_tags_raw, Item.category, Item.subcategory,
+                                   Item.colors, Item.pattern, Item.warmth, Item.formality, Item.seasons)
+                         .where(Item.user_id.in_(ids))).all()
+    for it in items:
+        active[it.user_id].add(day_of(it.user_id, it.created_at))
+    outfits = conn.execute(sa.select(Outfit.id, Outfit.user_id, Outfit.created_at, Outfit.source, Outfit.rating, Outfit.worn_at)
+                           .where(Outfit.user_id.in_(ids))).all()
+    for o in outfits:
+        active[o.user_id].add(day_of(o.user_id, o.created_at))
+        if o.worn_at:
+            active[o.user_id].add(day_of(o.user_id, o.worn_at))
+    for uid, at in conn.execute(sa.select(FeedbackEvent.user_id, FeedbackEvent.created_at).where(FeedbackEvent.user_id.in_(ids))):
+        active[uid].add(day_of(uid, at))
+
+    # retention by day since sign-up, over testers who have reached that day
+    horizon = {u.id: (now.date() - created[u.id].date()).days for u in users}
+    ret = []
+    for d in range(1, days + 1):
+        eligible = [u.id for u in users if horizon[u.id] >= d]
+        hit = sum(1 for uid in eligible if d in active[uid])
+        ret.append(f"D{d} {hit}/{len(eligible)}" if eligible else f"D{d} -")
+    lines.append("  active by day since sign-up: " + " · ".join(ret))
+
+    # acceptance per day bucket (AI outfits only)
+    shown: Counter = Counter()
+    accepted: Counter = Counter()
+    for o in outfits:
+        if o.source not in ("ai", "ai_edited"):
+            continue
+        d = day_of(o.user_id, o.created_at)
+        shown[d] += 1
+        if o.rating == 1 or o.worn_at is not None:
+            accepted[d] += 1
+    buckets = [("day 0-1", range(0, 2)), ("day 2-3", range(2, 4)), ("day 4-5", range(4, 6)), ("day 6-7", range(6, 8))]
+    parts = []
+    for name, rng in buckets:
+        sh = sum(shown[d] for d in rng)
+        ac = sum(accepted[d] for d in rng)
+        parts.append(f"{name} {ac}/{sh} ({_pct(ac, sh)})")
+    total_shown, total_acc = sum(shown.values()), sum(accepted.values())
+    lines.append(f"  acceptance (liked or worn / AI outfits shown): {total_acc}/{total_shown} ({_pct(total_acc, total_shown)}) — "
+                 + " · ".join(parts))
+
+    worn_days = len({(o.user_id, day_of(o.user_id, o.worn_at)) for o in outfits if o.worn_at})
+    active_days = sum(len(v) for v in active.values())
+    lines.append(f"  worn: {worn_days} tester-days with a worn outfit / {active_days} active tester-days ({_pct(worn_days, active_days)})")
+
+    # pieces and tag edits
+    per_user = Counter(it.user_id for it in items)
+    counts = sorted(per_user.get(u.id, 0) for u in users)
+    edits, with_raw = 0, 0
+    for it in items:
+        raw = it.ai_tags_raw or {}
+        if not raw:
+            continue
+        with_raw += 1
+        for f in TAG_FIELDS:
+            if f in raw and raw[f] != getattr(it, f):
+                edits += 1
+    lines.append(f"  pieces per tester p50 {_p(counts, 0.5)} · p90 {_p(counts, 0.9)} · total {len(items)}")
+    lines.append(f"  tag edits before saving: {edits} fields over {with_raw} pieces with raw tags "
+                 f"({edits / with_raw:.2f} per piece)" if with_raw else "  tag edits: no pieces carry ai_tags_raw yet")
+
+    # AVOID: disliked 3+ times, suggested again afterwards
+    dislikes = conn.execute(
+        sa.select(OutfitItem.item_id, Outfit.user_id, FeedbackEvent.created_at)
+        .join(Outfit, Outfit.id == OutfitItem.outfit_id)
+        .join(FeedbackEvent, FeedbackEvent.outfit_id == Outfit.id)
+        .where(Outfit.user_id.in_(ids), FeedbackEvent.kind == "dislike")
+    ).all()
+    third: dict = {}
+    by_item: dict = defaultdict(list)
+    for item_id, uid, at in dislikes:
+        by_item[(uid, item_id)].append(_aware(at))
+    for key, ats in by_item.items():
+        if len(ats) >= 3:
+            third[key] = sorted(ats)[2]
+    resuggested = 0
+    if third:
+        later = conn.execute(
+            sa.select(OutfitItem.item_id, Outfit.user_id, Outfit.created_at)
+            .join(Outfit, Outfit.id == OutfitItem.outfit_id)
+            .where(Outfit.user_id.in_(ids), Outfit.source == "ai")
+        ).all()
+        resuggested = sum(1 for item_id, uid, at in later if (uid, item_id) in third and _aware(at) > third[(uid, item_id)])
+    lines.append(f"  AVOID: {len(third)} piece(s) disliked 3+ times · suggested again afterwards {resuggested}")
+    verified = sum(1 for u in users if u.email_verified_at is not None)
+    lines.append(f"  verified: {verified}/{len(users)}")
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--date", type=date.fromisoformat, help="last day of the period (default: yesterday)",
                         default=datetime.now(timezone.utc).date() - timedelta(days=1))
     parser.add_argument("--days", type=int, default=1, help="period length in days, e.g. 7 for a weekly report")
+    parser.add_argument("--beta", type=date.fromisoformat, metavar="SINCE",
+                        help="closed-beta report for accounts registered since this day (instead of the AI summary)")
+    parser.add_argument("--emails", help="comma-separated tester e-mails to restrict --beta to")
     args = parser.parse_args()
 
     from app.db import engine
 
     with engine.connect() as conn:
-        print(report(conn, args.date - timedelta(days=args.days - 1), args.days))
+        if args.beta:
+            print(beta_report(conn, args.beta, args.emails.split(",") if args.emails else None))
+        else:
+            print(report(conn, args.date - timedelta(days=args.days - 1), args.days))
 
 
 if __name__ == "__main__":

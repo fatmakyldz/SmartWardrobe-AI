@@ -103,6 +103,7 @@ class AnalyzeOut(BaseModel):
 class ItemIn(Tags):
     image_key: str = Field(max_length=120)
     ai_confidence: float | None = Field(default=None, ge=0, le=1)  # as /items/analyze reported it
+    ai_tags_raw: Tags | None = None  # the tags /items/analyze proposed, before the person edited them (§2)
 
 
 class ItemUpdate(BaseModel):

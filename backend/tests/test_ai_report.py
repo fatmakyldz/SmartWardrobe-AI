@@ -82,3 +82,73 @@ def test_report_counts_onboarding_ttfo_and_conversion(client, fake_ai, outbox):
     assert "onboarding: 2 accounts registered" in text
     assert "first outfit: 1 (50.0%) · time to first outfit p50 90 s · p90 90 s" in text
     assert "verified: 1 (50.0%) · of which after seeing an outfit 1" in text
+
+
+def test_beta_report_reads_the_cohort_by_day_since_sign_up(client, fake_ai):
+    """Two testers: one active on days 0, 1 and 3 with accepted outfits and edited tags, one who signed up and
+    vanished. A piece disliked three times that still comes back is counted under AVOID."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.db import SessionLocal, engine
+    from app.models import FeedbackEvent, Item, Outfit, OutfitItem, User
+    from scripts.ai_report import beta_report
+
+    now = datetime(2026, 10, 30, 12, tzinfo=timezone.utc)
+    t0 = now - timedelta(days=3, hours=2)  # tester a signed up 3 days ago
+    with SessionLocal() as db:
+        a = User(email="A@Example.com", password_hash="x", created_at=t0, email_verified_at=t0 + timedelta(hours=1))
+        b = User(email="b@example.com", password_hash="x", created_at=now - timedelta(days=1))
+        db.add_all([a, b])
+        db.flush()
+        raw = {"category": "top", "subcategory": "t-shirt", "colors": ["white"], "pattern": "solid", "warmth": 2, "formality": 2, "seasons": ["summer"]}
+        top = Item(user_id=a.id, image_key=f"u/{a.id.hex}/1.webp", category="top", subcategory="shirt", colors=["white"],
+                   pattern="solid", warmth=2, formality=3, seasons=["summer"], ai_tags_raw=raw, created_at=t0 + timedelta(minutes=5))
+        bottom = Item(user_id=a.id, image_key=f"u/{a.id.hex}/2.webp", category="bottom", colors=["navy"], ai_tags_raw=None,
+                      created_at=t0 + timedelta(minutes=6))
+        db.add_all([top, bottom])
+        db.flush()
+
+        def outfit(at, rating=0, worn=None):
+            o = Outfit(user_id=a.id, occasion="casual", title="t", reason="r", source="ai", rating=rating, worn_at=worn, created_at=at,
+                       outfit_items=[OutfitItem(item=top, position=0, slot="top"), OutfitItem(item=bottom, position=1, slot="bottom")])
+            db.add(o)
+            db.flush()
+            return o
+
+        o0 = outfit(t0 + timedelta(minutes=10), rating=1)                      # day 0: liked
+        o1 = outfit(t0 + timedelta(days=1), worn=t0 + timedelta(days=1, hours=1))  # day 1: worn
+        d1 = outfit(t0 + timedelta(days=1, hours=2), rating=-1)               # day 1: disliked ×3 (the same pieces)
+        d2 = outfit(t0 + timedelta(days=1, hours=3), rating=-1)
+        d3 = outfit(t0 + timedelta(days=1, hours=4), rating=-1)
+        again = outfit(t0 + timedelta(days=3))                                # day 3: the disliked pieces come back
+        for o, kind, at in ((o0, "like", o0.created_at), (d1, "dislike", d1.created_at), (d2, "dislike", d2.created_at), (d3, "dislike", d3.created_at)):
+            db.add(FeedbackEvent(user_id=a.id, outfit_id=o.id, kind=kind, created_at=at))
+        db.commit()
+
+    with engine.connect() as conn:
+        text = beta_report(conn, (now - timedelta(days=5)).date(), now=now)
+        only_a = beta_report(conn, (now - timedelta(days=5)).date(), emails=["a@example.com"], now=now)
+    assert "2 testers" in text and "1 testers" in only_a
+    assert "D1 1/2" in text and "D3 1/1" in text  # b has not reached day 3 yet
+    assert "acceptance (liked or worn / AI outfits shown): 2/6" in text
+    assert "day 0-1 2/5" in text
+    assert "worn: 1 tester-days" in text
+    assert "pieces per tester p50 0 · p90 2 · total 2" in text
+    assert "tag edits before saving: 2 fields over 1 pieces" in text  # subcategory and formality changed
+    assert "AVOID: 2 piece(s) disliked 3+ times · suggested again afterwards 2" in text
+    assert "verified: 1/2" in text
+
+
+def test_create_item_keeps_the_raw_ai_tags(client, auth, fake_ai):
+    from app.db import SessionLocal
+    from app.models import Item
+    from tests.test_storage import upload
+
+    fake_ai.respond = lambda call, model: {"is_clothing": True, "category": "top", "colors": ["white"]}
+    key = upload(client, auth)
+    raw = {"name": "", "category": "top", "subcategory": "", "colors": ["white"], "pattern": "solid", "warmth": 3, "formality": 2, "seasons": []}
+    r = client.post("/items", json={**raw, "image_key": key, "subcategory": "shirt", "ai_tags_raw": raw}, headers=auth)
+    assert r.status_code == 201, r.text
+    with SessionLocal() as db:
+        item = db.get(Item, __import__("uuid").UUID(r.json()["id"]))
+        assert item.subcategory == "shirt" and item.ai_tags_raw["subcategory"] == "" and item.ai_tags_raw["colors"] == ["white"]
