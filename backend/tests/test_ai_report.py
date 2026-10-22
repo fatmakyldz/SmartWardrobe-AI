@@ -116,22 +116,34 @@ def test_beta_report_reads_the_cohort_by_day_since_sign_up(client, fake_ai):
             return o
 
         o0 = outfit(t0 + timedelta(minutes=10), rating=1)                      # day 0: liked
-        o1 = outfit(t0 + timedelta(days=1), worn=t0 + timedelta(days=1, hours=1))  # day 1: worn
+        outfit(t0 + timedelta(days=1), worn=t0 + timedelta(days=1, hours=1))   # day 1: worn
         d1 = outfit(t0 + timedelta(days=1, hours=2), rating=-1)               # day 1: disliked ×3 (the same pieces)
         d2 = outfit(t0 + timedelta(days=1, hours=3), rating=-1)
         d3 = outfit(t0 + timedelta(days=1, hours=4), rating=-1)
-        again = outfit(t0 + timedelta(days=3))                                # day 3: the disliked pieces come back
-        for o, kind, at in ((o0, "like", o0.created_at), (d1, "dislike", d1.created_at), (d2, "dislike", d2.created_at), (d3, "dislike", d3.created_at)):
+        outfit(t0 + timedelta(days=2))                                        # day 2: the disliked pieces come back
+        # a claimed demo brought an older liked outfit along: predates the account, must not count anywhere
+        demo_old = Outfit(user_id=a.id, occasion="casual", title="demo", reason="r", source="ai", rating=1, created_at=t0 - timedelta(days=2),
+                          outfit_items=[OutfitItem(item=top, position=0, slot="top")])
+        db.add(demo_old)
+        db.flush()
+        events = [(o0, "like", o0.created_at), (d1, "dislike", d1.created_at), (d2, "dislike", d2.created_at), (d3, "dislike", d3.created_at),
+                  (demo_old, "like", demo_old.created_at),
+                  # dislike → unrate → dislike on one outfit is still one disliked outfit
+                  (d3, "unrate", d3.created_at + timedelta(minutes=1)), (d3, "dislike", d3.created_at + timedelta(minutes=2))]
+        for o, kind, at in events:
             db.add(FeedbackEvent(user_id=a.id, outfit_id=o.id, kind=kind, created_at=at))
+        # colours re-selected in another order are not an edit
+        top.colors = ["white"]
+        top.ai_tags_raw = {**raw, "colors": ["white"]}
         db.commit()
 
     with engine.connect() as conn:
         text = beta_report(conn, (now - timedelta(days=5)).date(), now=now)
         only_a = beta_report(conn, (now - timedelta(days=5)).date(), emails=["a@example.com"], now=now)
     assert "2 testers" in text and "1 testers" in only_a
-    assert "D1 1/2" in text and "D3 1/1" in text  # b has not reached day 3 yet
-    assert "acceptance (liked or worn / AI outfits shown): 2/6" in text
-    assert "day 0-1 2/5" in text
+    assert "D1 1/1" in text and "D2 1/1" in text and "D3 -" in text  # b's day 1 and a's day 3 are today: not complete
+    assert "acceptance (liked or worn / AI outfits shown): 2/6" in text  # the claimed-demo outfit is not counted
+    assert "day 0-1 2/5" in text and "day 2-3 0/1" in text
     assert "worn: 1 tester-days" in text
     assert "pieces per tester p50 0 · p90 2 · total 2" in text
     assert "tag edits before saving: 2 fields over 1 pieces" in text  # subcategory and formality changed

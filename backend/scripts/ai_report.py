@@ -155,7 +155,12 @@ def beta_report(conn: sa.Connection, since: date, emails: list[str] | None = Non
     - acceptance: AI outfits created that day that were liked or worn (rating 1 or worn_at) / AI outfits shown
     - worn: days with a worn outfit / active days
     - tag edits: fields the person changed before saving, against ai_tags_raw (pieces with raw tags only)
-    - AVOID: pieces disliked in 3+ outfits that still appear in a later AI outfit
+    - AVOID: pieces disliked in 3+ distinct outfits that still appear in a later AI outfit (not ai_edited: the
+      person may have put the piece back themselves)
+
+    Days are UTC dates. Records older than the account (a claimed demo's outfits, feedback and requests) are
+    skipped; copied demo pieces still count in "pieces per tester". Retention counts completed days only; the
+    acceptance of an outfit is read as its latest state (a like withdrawn later is not an acceptance).
     """
     now = now or datetime.now(timezone.utc)
     start = datetime.combine(since, time.min, tzinfo=timezone.utc)
@@ -164,7 +169,7 @@ def beta_report(conn: sa.Connection, since: date, emails: list[str] | None = Non
     if emails:
         q = q.where(sa.func.lower(User.email).in_([e.strip().lower() for e in emails if e.strip()]))
     users = conn.execute(q).all()
-    lines = [f"beta cohort since {since}: {len(users)} testers"]
+    lines = [f"beta cohort since {since} (UTC days): {len(users)} testers"]
     if not users:
         return "\n".join(lines)
     ids = [u.id for u in users]
@@ -174,27 +179,34 @@ def beta_report(conn: sa.Connection, since: date, emails: list[str] | None = Non
         return (_aware(at).date() - created[uid].date()).days
 
     active: dict = defaultdict(set)  # user -> {day}
+
+    def mark(uid, at) -> None:
+        d = day_of(uid, at)
+        if d >= 0:  # claimed-demo records predate the account
+            active[uid].add(d)
+
     for uid, at in conn.execute(sa.select(AIRequest.subject_id, AIRequest.created_at).where(AIRequest.subject_id.in_(ids))):
-        active[uid].add(day_of(uid, at))
+        mark(uid, at)
     items = conn.execute(sa.select(Item.id, Item.user_id, Item.created_at, Item.ai_tags_raw, Item.category, Item.subcategory,
                                    Item.colors, Item.pattern, Item.warmth, Item.formality, Item.seasons)
                          .where(Item.user_id.in_(ids))).all()
     for it in items:
-        active[it.user_id].add(day_of(it.user_id, it.created_at))
-    outfits = conn.execute(sa.select(Outfit.id, Outfit.user_id, Outfit.created_at, Outfit.source, Outfit.rating, Outfit.worn_at)
-                           .where(Outfit.user_id.in_(ids))).all()
+        mark(it.user_id, it.created_at)
+    outfits = [o for o in conn.execute(
+        sa.select(Outfit.id, Outfit.user_id, Outfit.created_at, Outfit.source, Outfit.rating, Outfit.worn_at)
+        .where(Outfit.user_id.in_(ids))).all() if day_of(o.user_id, o.created_at) >= 0]
     for o in outfits:
-        active[o.user_id].add(day_of(o.user_id, o.created_at))
+        mark(o.user_id, o.created_at)
         if o.worn_at:
-            active[o.user_id].add(day_of(o.user_id, o.worn_at))
+            mark(o.user_id, o.worn_at)
     for uid, at in conn.execute(sa.select(FeedbackEvent.user_id, FeedbackEvent.created_at).where(FeedbackEvent.user_id.in_(ids))):
-        active[uid].add(day_of(uid, at))
+        mark(uid, at)
 
-    # retention by day since sign-up, over testers who have reached that day
+    # retention by day since sign-up, over testers whose day d is complete (today is partial)
     horizon = {u.id: (now.date() - created[u.id].date()).days for u in users}
     ret = []
     for d in range(1, days + 1):
-        eligible = [u.id for u in users if horizon[u.id] >= d]
+        eligible = [u.id for u in users if horizon[u.id] > d]
         hit = sum(1 for uid in eligible if d in active[uid])
         ret.append(f"D{d} {hit}/{len(eligible)}" if eligible else f"D{d} -")
     lines.append("  active by day since sign-up: " + " · ".join(ret))
@@ -233,26 +245,36 @@ def beta_report(conn: sa.Connection, since: date, emails: list[str] | None = Non
             continue
         with_raw += 1
         for f in TAG_FIELDS:
-            if f in raw and raw[f] != getattr(it, f):
+            if f not in raw:
+                continue
+            a, b = raw[f], getattr(it, f)
+            if isinstance(a, list) and isinstance(b, list):
+                a, b = sorted(map(str, a)), sorted(map(str, b))  # the editor re-appends a re-selected colour
+            if a != b:
                 edits += 1
     lines.append(f"  pieces per tester p50 {_p(counts, 0.5)} · p90 {_p(counts, 0.9)} · total {len(items)}")
     lines.append(f"  tag edits before saving: {edits} fields over {with_raw} pieces with raw tags "
                  f"({edits / with_raw:.2f} per piece)" if with_raw else "  tag edits: no pieces carry ai_tags_raw yet")
 
-    # AVOID: disliked 3+ times, suggested again afterwards
+    # AVOID: disliked in 3+ distinct outfits (the earliest dislike per outfit; dislike → unrate → dislike on one
+    # outfit is one), suggested again afterwards
     dislikes = conn.execute(
-        sa.select(OutfitItem.item_id, Outfit.user_id, FeedbackEvent.created_at)
+        sa.select(OutfitItem.item_id, Outfit.user_id, Outfit.id, Outfit.created_at, FeedbackEvent.created_at)
         .join(Outfit, Outfit.id == OutfitItem.outfit_id)
         .join(FeedbackEvent, FeedbackEvent.outfit_id == Outfit.id)
         .where(Outfit.user_id.in_(ids), FeedbackEvent.kind == "dislike")
     ).all()
     third: dict = {}
-    by_item: dict = defaultdict(list)
-    for item_id, uid, at in dislikes:
-        by_item[(uid, item_id)].append(_aware(at))
-    for key, ats in by_item.items():
-        if len(ats) >= 3:
-            third[key] = sorted(ats)[2]
+    by_item: dict = defaultdict(dict)  # (user, item) -> {outfit: earliest dislike}
+    for item_id, uid, outfit_id, o_created, at in dislikes:
+        if day_of(uid, o_created) < 0:
+            continue
+        at = _aware(at)
+        prev = by_item[(uid, item_id)].get(outfit_id)
+        by_item[(uid, item_id)][outfit_id] = at if prev is None or at < prev else prev
+    for key, per_outfit in by_item.items():
+        if len(per_outfit) >= 3:
+            third[key] = sorted(per_outfit.values())[2]
     resuggested = 0
     if third:
         later = conn.execute(
