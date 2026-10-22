@@ -72,3 +72,6 @@ Design: [`docs/AI-00-foundation.md`](docs/AI-00-foundation.md) — Claude primar
 - [x] AI-09b Error tracking — Sentry on both sides, off until a DSN is set: backend `sentry-sdk[fastapi]` (`observability.py`, 5xx only, PII stripped), app `@sentry/react-native` (`lib/observability.ts`, `expoRouterIntegration`, `Sentry.wrap`, ErrorBoundary capture, Metro config for debug ids, Expo plugin for source-map upload)
 - [ ] AI-09c Cleanup migration — **R2 migration verified and `STORAGE_BACKEND=s3` live since 22 Oct 2026** (73 images, `--verify` OK) → `0004_cleanup` not before **29 Oct 2026**, after a Neon branch/backup (§14 C9); the other §2 retention rows (`usage_counters` after 400 days, expired `refresh_tokens` after 30 days) and the `ai_requests` 13-month roll-up (due from Nov 2027)
 - [ ] Store metadata, brand/bundle id, builds — see Phase 4
+
+### v1.1 candidates (decided on evidence, not before V1.0 ships)
+- [ ] Zero-effort wardrobe: several garments from one photo — `backend/scripts/experiments/multi_garment.py` measures detection + boxing on your own photos (`bed-6.jpg` names carry the expected count; `--tag` runs tagging v2 on every crop). Build the feature only if ≥ 18/20 photos box every garment cleanly; otherwise keep the one-photo-per-piece flow.
